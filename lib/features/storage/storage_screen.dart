@@ -4,9 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/ui.dart';
+import '../../shared/app_theme.dart';
 import 'item_viewer_screen.dart';
+import 'folder_cover.dart';
 import 'note_editor_screen.dart';
 import 'vault_models.dart';
+import 'vault_item_card.dart';
 import 'vault_repository.dart';
 
 class StorageScreen extends StatefulWidget {
@@ -181,7 +184,7 @@ class StorageScreenState extends State<StorageScreen> {
         },
         child: ListView(
           key: const PageStorageKey('storage-list'),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: [
             Row(
               children: [
@@ -198,7 +201,10 @@ class StorageScreenState extends State<StorageScreen> {
                       Text(
                         folder?.name ?? 'Kho của bạn',
                         style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
+                            ?.copyWith(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                       Text(
                         folder == null
@@ -211,6 +217,15 @@ class StorageScreenState extends State<StorageScreen> {
                     ],
                   ),
                 ),
+                if (folder != null)
+                  IconButton(
+                    key: const Key('change-folder-cover'),
+                    tooltip: 'Đổi ảnh đại diện',
+                    onPressed: _importing
+                        ? null
+                        : () => chooseFolderCover(context, repository, folder),
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                  ),
                 IconButton(
                   key: const Key('add-folder'),
                   tooltip: 'Thêm thư mục',
@@ -218,19 +233,19 @@ class StorageScreenState extends State<StorageScreen> {
                   icon: const Icon(Icons.create_new_folder_outlined),
                 ),
                 if (folder != null)
-                  IconButton.filled(
+                  IconButton(
                     key: const Key('add-content'),
                     tooltip: 'Thêm nội dung',
                     onPressed: _importing ? null : _addContent,
-                    icon: const Icon(Icons.add_rounded, color: Colors.white),
+                    icon: const Icon(Icons.add_circle_outline, size: 24),
                   ),
               ],
             ),
             if (folder != null) ...[
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
-                runSpacing: 8,
+                runSpacing: 6,
                 children: [
                   for (final action in [
                     (
@@ -258,7 +273,8 @@ class StorageScreenState extends State<StorageScreen> {
                       message: action.$4,
                       child: ActionChip(
                         key: ValueKey('quick-add-${action.$1}'),
-                        avatar: Icon(action.$2, size: 22),
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        avatar: Icon(action.$2, size: 20),
                         label: Text(action.$3),
                         labelStyle: TextStyle(
                           color: Theme.of(context).colorScheme.onSurface,
@@ -272,64 +288,94 @@ class StorageScreenState extends State<StorageScreen> {
               ),
             ],
             if (_importing) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               const LinearProgressIndicator(),
               const SizedBox(height: 8),
               const Text('Đang nhập tệp…'),
             ],
             if (folders.isNotEmpty) ...[
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
               Text(
                 'Nhấn đúp để mở thư mục',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               LayoutBuilder(
-                builder: (context, constraints) => GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: (constraints.maxWidth / 160).floor().clamp(
-                      2,
-                      5,
+                builder: (context, constraints) {
+                  final columns = (constraints.maxWidth / 170).floor().clamp(
+                    2,
+                    5,
+                  );
+                  final tileWidth =
+                      (constraints.maxWidth - (columns - 1) * 10) / columns;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      mainAxisExtent:
+                          tileWidth * 9 / 16 +
+                          MediaQuery.textScalerOf(context).scale(52),
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 8,
                     ),
-                    mainAxisExtent: MediaQuery.textScalerOf(context).scale(180),
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                  ),
-                  itemCount: folders.length,
-                  itemBuilder: (context, index) {
-                    final entry = folders[index];
-                    final selected = entry.id == _selectedId;
-                    final count =
-                        repository.itemsIn(entry.id).length +
-                        repository.foldersIn(entry.id).length;
-                    return FolderTile(
-                      folder: entry,
-                      count: count,
-                      selected: selected,
-                      onSelect: () => setState(() => _selectedId = entry.id),
-                      onOpen: () => openFolder(entry),
-                    );
-                  },
-                ),
+                    itemCount: folders.length,
+                    itemBuilder: (context, index) {
+                      final entry = folders[index];
+                      final count =
+                          repository.itemsIn(entry.id).length +
+                          repository.foldersIn(entry.id).length;
+                      return FolderTile(
+                        folder: entry,
+                        count: count,
+                        selected: entry.id == _selectedId,
+                        repository: repository,
+                        onChangeCover: () =>
+                            chooseFolderCover(context, repository, entry),
+                        onSelect: () => setState(() => _selectedId = entry.id),
+                        onOpen: () => openFolder(entry),
+                      );
+                    },
+                  );
+                },
               ),
             ],
             if (items.isNotEmpty) ...[
               SectionTitle(folder == null ? 'Gần đây' : 'Nội dung'),
-              SurfaceCard(
-                padding: EdgeInsets.zero,
-                child: Column(
-                  children: [
-                    for (final item in items)
-                      VaultItemTile(
-                        item: item,
-                        repository: repository,
-                        onTap: () => openVaultItem(context, repository, item),
-                      ),
-                  ],
+              if (folder == null)
+                SurfaceCard(
+                  padding: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      for (final item in items)
+                        VaultItemTile(
+                          item: item,
+                          repository: repository,
+                          onTap: () => openVaultItem(context, repository, item),
+                        ),
+                    ],
+                  ),
+                )
+              else
+                GridView.builder(
+                  key: const Key('folder-content-grid'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: items.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisExtent: MediaQuery.textScalerOf(context).scale(240),
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemBuilder: (context, index) => VaultItemCard(
+                    key: ValueKey('content-card-${items[index].id}'),
+                    item: items[index],
+                    repository: repository,
+                    onOpen: () =>
+                        openVaultItem(context, repository, items[index]),
+                  ),
                 ),
-              ),
             ],
             if (folders.isEmpty && items.isEmpty)
               EmptyState(
@@ -369,85 +415,137 @@ class FolderTile extends StatelessWidget {
     required this.onSelect,
     required this.onOpen,
     this.selected = false,
+    this.repository,
+    this.onChangeCover,
   });
   final VaultFolder folder;
   final int count;
   final bool selected;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
+  final VaultRepository? repository;
+  final VoidCallback? onChangeCover;
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: 'Thư mục ${folder.name}, $count nội dung',
-      onTap: onOpen,
-      child: Material(
-        color: selected ? colors.primary : colors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: BorderSide(
-            color: selected
-                ? colors.primary
-                : colors.outlineVariant.withValues(alpha: .5),
-          ),
-        ),
-        child: InkWell(
-          key: ValueKey('folder-${folder.id}'),
-          borderRadius: BorderRadius.circular(28),
-          onTap: onSelect,
-          onDoubleTap: onOpen,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: 'Thư mục ${folder.name}, $count nội dung',
+    onTap: onOpen,
+    child: Stack(
+      children: [
+        Material(
+          color: Colors.white,
+          child: InkWell(
+            key: ValueKey('folder-${folder.id}'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: onSelect,
+            onDoubleTap: onOpen,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.folder_outlined,
-                      size: 42,
-                      color: selected ? Colors.white : colors.primary,
+                AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: FolderCoverImage(
+                            folder: folder,
+                            repository: repository,
+                          ),
+                        ),
+                        Positioned(
+                          right: 8,
+                          bottom: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.ink,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.playlist_play,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '$count',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (selected)
+                          const Positioned(
+                            left: 6,
+                            top: 6,
+                            child: Icon(
+                              Icons.check_circle,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                      ],
                     ),
-                    const Spacer(),
-                    Icon(
-                      Icons.north_east_rounded,
-                      size: 18,
-                      color: selected
-                          ? Colors.white60
-                          : colors.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  folder.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontSize: 17,
-                    color: selected ? Colors.white : colors.onSurface,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
+                Text(
+                  folder.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 3),
                 Text(
                   '$count nội dung',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: selected ? Colors.white70 : colors.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
+        // Keep the cover control outside the folder's double-tap recognizer.
+        if (onChangeCover != null)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: IconButton(
+              key: ValueKey('folder-cover-${folder.id}'),
+              tooltip: 'Đổi ảnh đại diện ${folder.name}',
+              onPressed: onChangeCover,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black54,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(32, 32),
+                padding: const EdgeInsets.all(6),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              icon: const Icon(
+                Icons.photo_camera_outlined,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 class VaultItemTile extends StatelessWidget {
@@ -465,34 +563,47 @@ class VaultItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-    leading: item.type == VaultItemType.image && repository != null
-        ? ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: Image.file(
-              repository!.fileFor(item),
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => const SizedBox.square(
-                dimension: 48,
-                child: Icon(Icons.image_outlined),
-              ),
-            ),
-          )
-        : CircleAvatar(
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            child: Icon(itemIcon(item.type), size: 22),
-          ),
-    title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+    contentPadding: const EdgeInsets.symmetric(vertical: 2),
+    horizontalTitleGap: 12,
+    minLeadingWidth: 88,
+    leading: ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: SizedBox(
+        width: 88,
+        height: 50,
+        child: item.type == VaultItemType.image && repository != null
+            ? Image.file(
+                repository!.fileFor(item),
+                fit: BoxFit.cover,
+                frameBuilder: (_, child, frame, _) =>
+                    frame == null ? _placeholder() : child,
+                errorBuilder: (_, _, _) => _placeholder(),
+              )
+            : _placeholder(),
+      ),
+    ),
+    title: Text(item.name, maxLines: 2, overflow: TextOverflow.ellipsis),
     subtitle: Text(
-      '${folderName == null ? itemTypeLabel(item.type) : folderName!} · ${formatBytes(item.size)}\n'
+      '${folderName ?? itemTypeLabel(item.type)} · ${formatBytes(item.size)}\n'
       '${item.isNote && item.text.trim().isNotEmpty ? item.text.trim().replaceAll('\n', ' ') : formatDate(item.updatedAt)}',
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
     ),
-    trailing: const Icon(Icons.chevron_right_rounded),
+    trailing: const Icon(Icons.chevron_right, size: 20),
     onTap: onTap,
+  );
+
+  Widget _placeholder() => ColoredBox(
+    color: AppTheme.soft,
+    child: Center(
+      child: Icon(
+        item.type == VaultItemType.video
+            ? Icons.play_circle_outline
+            : itemIcon(item.type),
+        size: 28,
+        color: AppTheme.muted,
+      ),
+    ),
   );
 }
 

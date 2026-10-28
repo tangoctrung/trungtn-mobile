@@ -230,4 +230,113 @@ void main() {
       }
     },
   );
+  test(
+    'Folder covers survive restart and are independent of the selected source',
+    () async {
+      final folder = await repository.createFolder('Ảnh bìa');
+      final source = File(p.join(directory.path, 'chosen.jpg'));
+      await File('assets/demo/owl.jpg').copy(source.path);
+      final bytes = await source.readAsBytes();
+      final updated = await repository.setFolderCover(
+        folderId: folder.id,
+        source: source,
+        name: 'chosen.jpg',
+      );
+      final storedFile = repository.folderCoverFile(updated)!;
+      await source.delete();
+      expect(await storedFile.readAsBytes(), bytes);
+      final fresh = VaultRepository(directoryProvider: () async => directory);
+      addTearDown(fresh.dispose);
+      await fresh.load();
+      expect(
+        fresh.folder(folder.id).coverRelativePath,
+        updated.coverRelativePath,
+      );
+      expect(
+        await fresh.folderCoverFile(fresh.folder(folder.id))!.readAsBytes(),
+        bytes,
+      );
+      expect(fresh.items, isEmpty);
+    },
+  );
+
+  test('Replacing and resetting a cover preserves folder content', () async {
+    final folder = await repository.createFolder('Cá nhân');
+    final note = await repository.saveNote(
+      folderId: folder.id,
+      name: 'Ghi chú',
+      text: 'Giữ lại',
+      richText: false,
+    );
+    final source = File('assets/demo/owl.jpg');
+    final first = await repository.setFolderCover(
+      folderId: folder.id,
+      source: source,
+      name: 'first.jpg',
+    );
+    final firstFile = repository.folderCoverFile(first)!;
+    final second = await repository.setFolderCover(
+      folderId: folder.id,
+      source: source,
+      name: 'second.jpg',
+    );
+    expect(await firstFile.exists(), isFalse);
+    final secondFile = repository.folderCoverFile(second)!;
+    await repository.resetFolderCover(folder.id);
+    expect(repository.folder(folder.id).coverRelativePath, isNull);
+    expect(await secondFile.exists(), isFalse);
+    expect(repository.itemsIn(folder.id).single.id, note.id);
+    expect(repository.itemsIn(folder.id).single.text, 'Giữ lại');
+  });
+
+  test(
+    'A failed cover import leaves the previous cover and metadata intact',
+    () async {
+      final folder = await repository.createFolder('Cá nhân');
+      final updated = await repository.setFolderCover(
+        folderId: folder.id,
+        source: File('assets/demo/owl.jpg'),
+        name: 'original.jpg',
+      );
+      final empty = File(p.join(directory.path, 'empty.jpg'));
+      await empty.writeAsBytes([]);
+      await expectLater(
+        repository.setFolderCover(
+          folderId: folder.id,
+          source: empty,
+          name: 'empty.jpg',
+        ),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(
+        repository.folder(folder.id).coverRelativePath,
+        updated.coverRelativePath,
+      );
+      expect(
+        await repository
+            .folderCoverFile(repository.folder(folder.id))!
+            .exists(),
+        isTrue,
+      );
+      await expectLater(
+        repository.setFolderCover(
+          folderId: folder.id,
+          source: empty,
+          name: 'text.txt',
+        ),
+        throwsArgumentError,
+      );
+    },
+  );
+
+  test('Folders in an older index without cover metadata still load', () async {
+    final folder = await repository.createFolder('Cũ');
+    final index = File(p.join(directory.path, 'vault', 'index.json'));
+    final json = jsonDecode(await index.readAsString()) as Map;
+    (json['folders'] as List).first.remove('coverRelativePath');
+    await index.writeAsString(jsonEncode(json));
+    await repository.load();
+    expect(repository.error, isNull);
+    expect(repository.folder(folder.id).coverRelativePath, isNull);
+  });
 }

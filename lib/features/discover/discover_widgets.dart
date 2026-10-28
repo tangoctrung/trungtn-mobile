@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../shared/app_theme.dart';
 import '../../shared/ui.dart';
 import 'discover_controller.dart';
 import 'discover_models.dart';
@@ -26,130 +27,234 @@ class WeatherCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final resource = controller.weather;
     final weather = resource.data;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF171717),
-        borderRadius: BorderRadius.circular(26),
+        color: AppTheme.soft,
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: DefaultTextStyle(
-        style: Theme.of(context).textTheme.bodyMedium!
-            .copyWith(color: Colors.white),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(
-                  Icons.location_on_outlined,
-                  color: Colors.white,
-                  size: 18,
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    weather?.city.name ?? controller.city.name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                PopupMenuButton<WeatherCity>(
-                  tooltip: 'Đổi thành phố',
-                  icon: const Icon(
-                    Icons.expand_more_rounded,
-                    color: Colors.white,
-                  ),
-                  onSelected: controller.changeCity,
-                  itemBuilder: (_) => [
-                    for (final city in WeatherCity.choices)
-                      PopupMenuItem(value: city, child: Text(city.name)),
-                  ],
-                ),
-              ],
-            ),
-            if (weather != null) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(
-                          '${weather.temperature.round()}°',
-                          style: const TextStyle(
-                            fontSize: 58,
-                            fontWeight: FontWeight.w500,
-                            height: 1.2,
+                        Flexible(
+                          child: Text(
+                            weather?.city.name ?? controller.city.name,
+                            style: theme.textTheme.titleSmall,
                           ),
                         ),
-                        Text(
-                          weather.description,
-                          style: const TextStyle(fontSize: 17),
+                        SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: PopupMenuButton<WeatherCity>(
+                            tooltip: 'Đổi thành phố',
+                            padding: EdgeInsets.zero,
+                            icon: const Icon(Icons.expand_more, size: 20),
+                            onSelected: controller.changeCity,
+                            itemBuilder: (_) => [
+                              for (final city in WeatherCity.choices)
+                                PopupMenuItem(
+                                  value: city,
+                                  child: Text(city.name),
+                                ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
+                    Text(
+                      weather?.description ??
+                          (resource.loading
+                              ? 'Đang tải thời tiết…'
+                              : 'Chưa có dữ liệu thời tiết'),
+                    ),
+                    if (weather != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Độ ẩm ${weather.humidity}% · Gió ${weather.windSpeed.round()} km/h',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (weather != null) ...[
+                const SizedBox(width: 12),
+                Icon(
+                  weather.code >= 95
+                      ? Icons.thunderstorm_outlined
+                      : weather.code >= 51
+                      ? Icons.grain
+                      : weather.code >= 1
+                      ? Icons.cloud_outlined
+                      : Icons.wb_sunny_outlined,
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${weather.temperature.round()}°',
+                  style: const TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w400,
+                    height: 1.1,
                   ),
-                  Icon(
-                    weather.code >= 95
-                        ? Icons.thunderstorm_outlined
-                        : weather.code >= 51
-                        ? Icons.grain_rounded
-                        : weather.code >= 1
-                        ? Icons.cloud_outlined
-                        : Icons.wb_sunny_outlined,
-                    size: 68,
-                    color: const Color(0xFFEEEEEE),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 18,
-                runSpacing: 8,
-                children: [
-                  Text('Cảm giác ${weather.feelsLike.round()}°'),
-                  Text('Độ ẩm ${weather.humidity}%'),
-                  Text('Gió ${weather.windSpeed.round()} km/h'),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Dữ liệu thời tiết: ${formatDate(weather.observedAt)}',
-                style: const TextStyle(fontSize: 13, color: Color(0xFFBDBDBD)),
-              ),
-            ] else ...[
-              const SizedBox(height: 16),
-              if (resource.loading)
-                const LinearProgressIndicator(
-                  color: Colors.white,
-                  backgroundColor: Colors.white24,
-                )
-              else
-                const Text('Chưa có dữ liệu thời tiết.'),
-              const SizedBox(height: 12),
+                ),
+              ],
             ],
-            if (resource.error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
+          ),
+          if (resource.loading)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: LinearProgressIndicator(minHeight: 2),
+            ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
                 child: Text(
-                  resource.error!,
-                  style: const TextStyle(color: Color(0xFFEEEEEE)),
+                  weather == null
+                      ? 'Thời tiết hôm nay'
+                      : 'Cảm giác ${weather.feelsLike.round()}° · ${formatDate(weather.observedAt)}',
+                  style: theme.textTheme.bodySmall,
                 ),
               ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                style: TextButton.styleFrom(foregroundColor: colors.onPrimary),
-                onPressed: () =>
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () =>
                     openSource(context, Uri.parse('https://open-meteo.com/')),
-                child: const Text(
-                  'Open-Meteo ↗',
-                  style: TextStyle(fontSize: 13),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Open-Meteo', style: theme.textTheme.bodySmall),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.open_in_new,
+                        size: 12,
+                        color: AppTheme.muted,
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+            ],
+          ),
+          if (resource.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(resource.error!, style: theme.textTheme.bodySmall),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class MarketOverview extends StatelessWidget {
+  const MarketOverview({super.key, required this.controller});
+  final DiscoverController controller;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: _tile(
+          context,
+          'Giá vàng',
+          Icons.diamond_outlined,
+          controller.gold,
+          Uri.parse('https://btmc.vn/'),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: _tile(
+          context,
+          'Giá xăng dầu',
+          Icons.local_gas_station_outlined,
+          controller.fuel,
+          Uri.parse('https://www.petrolimex.com.vn/'),
+        ),
+      ),
+    ],
+  );
+
+  Widget _tile(
+    BuildContext context,
+    String title,
+    IconData icon,
+    FeedResource<PriceBoard> resource,
+    Uri source,
+  ) {
+    final theme = Theme.of(context);
+    final board = resource.data;
+    final row = board?.rows.first;
+    return Material(
+      color: AppTheme.soft,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          useRootNavigator: false,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          builder: (context) => ListenableBuilder(
+            listenable: controller,
+            builder: (context, _) => SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: PriceBoardCard(
+                title: title,
+                icon: icon,
+                resource: resource,
+                sourceUrl: source,
               ),
             ),
-          ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 20),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(title, style: theme.textTheme.titleSmall),
+                  ),
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                row == null
+                    ? (resource.loading ? 'Đang tải…' : 'Chưa có dữ liệu')
+                    : '${formatMoney(row.second)} ${board!.unit}',
+                maxLines: 2,
+                style: theme.textTheme.titleSmall,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                row?.name ?? 'Xem bảng giá',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -172,54 +277,39 @@ class PriceBoardCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final board = resource.data;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return SurfaceCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: colors.primary),
+              Icon(icon, size: 24),
               const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ),
+              Expanded(child: Text(title, style: theme.textTheme.titleLarge)),
               IconButton(
                 tooltip: 'Xem nguồn $title',
-                visualDensity: VisualDensity.compact,
                 onPressed: () =>
                     openSource(context, board?.sourceUrl ?? sourceUrl),
-                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                icon: const Icon(Icons.open_in_new, size: 20),
               ),
             ],
           ),
-          if (resource.loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: LinearProgressIndicator(),
-            ),
+          if (resource.loading) const LinearProgressIndicator(minHeight: 2),
           if (board != null) ...[
-            const SizedBox(height: 12),
             Text(
               '${board.source} · ${board.unit}',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: theme.textTheme.bodySmall,
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             for (final row in board.rows)
               Padding(
-                padding: const EdgeInsets.only(bottom: 18),
+                padding: const EdgeInsets.only(bottom: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      row.name,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const SizedBox(height: 10),
+                    Text(row.name, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
@@ -229,7 +319,7 @@ class PriceBoardCard extends StatelessWidget {
                             row.first,
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: _priceCell(
                             context,
@@ -244,12 +334,12 @@ class PriceBoardCard extends StatelessWidget {
               ),
             Text(
               'Nguồn cập nhật: ${board.rows.first.updatedAt}',
-              style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+              style: theme.textTheme.bodySmall,
             ),
             if (resource.fetchedAt != null)
               Text(
                 'Lấy dữ liệu: ${formatDate(resource.fetchedAt!)}',
-                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+                style: theme.textTheme.bodySmall,
               ),
           ] else if (!resource.loading)
             const Padding(
@@ -258,11 +348,8 @@ class PriceBoardCard extends StatelessWidget {
             ),
           if (resource.error != null)
             Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                resource.error!,
-                style: TextStyle(fontSize: 14, color: colors.error),
-              ),
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(resource.error!, style: theme.textTheme.bodySmall),
             ),
         ],
       ),
@@ -270,10 +357,10 @@ class PriceBoardCard extends StatelessWidget {
   }
 
   Widget _priceCell(BuildContext context, String label, num value) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+    padding: const EdgeInsets.all(12),
     decoration: BoxDecoration(
-      color: const Color(0xFFF5F5F5),
-      borderRadius: BorderRadius.circular(18),
+      color: AppTheme.soft,
+      borderRadius: BorderRadius.circular(8),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -299,100 +386,98 @@ class NewsPostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 24),
       child: Material(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(28),
-        clipBehavior: Clip.antiAlias,
+        color: Colors.white,
         child: InkWell(
           onTap: () => openSource(context, post.url),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (post.imageUrl != null)
-                Image.network(
-                  post.imageUrl.toString(),
-                  height: 190,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, progress) => progress == null
-                      ? child
-                      : const SizedBox(
-                          height: 190,
-                          child: Center(child: Icon(Icons.image_outlined)),
-                        ),
-                  errorBuilder: (_, _, _) => const SizedBox(
-                    height: 100,
-                    child: Center(
-                      child: Icon(Icons.newspaper_rounded, size: 40),
-                    ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: post.imageUrl == null
+                      ? const ColoredBox(
+                          color: AppTheme.soft,
+                          child: Center(
+                            child: Icon(Icons.newspaper_outlined, size: 32),
                           ),
-                          decoration: BoxDecoration(
-                            color: colors.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            post.categoryName,
-                            style: TextStyle(
-                              color: colors.onPrimaryContainer,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                        )
+                      : Image.network(
+                          post.imageUrl.toString(),
+                          fit: BoxFit.cover,
+                          loadingBuilder: (_, child, progress) =>
+                              progress == null
+                              ? child
+                              : const ColoredBox(color: AppTheme.soft),
+                          errorBuilder: (_, _, _) => const ColoredBox(
+                            color: AppTheme.soft,
+                            child: Center(
+                              child: Icon(Icons.newspaper_outlined, size: 32),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'VnExpress',
-                            style: TextStyle(fontSize: 14),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const CircleAvatar(
+                      radius: 17,
+                      backgroundColor: AppTheme.soft,
+                      child: Text(
+                        'V',
+                        style: TextStyle(
+                          color: AppTheme.accent,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            post.title,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium,
                           ),
-                        ),
-                        const Icon(Icons.north_east_rounded, size: 17),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      post.title,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700, height: 1.4),
-                    ),
-                    if (post.summary.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        post.summary,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: colors.onSurfaceVariant,
-                          height: 1.5,
-                        ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'VnExpress · ${post.categoryName}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                          if (post.publishedAt != null)
+                            Text(
+                              formatDate(post.publishedAt!),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          if (post.summary.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 5),
+                              child: Text(
+                                post.summary,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
                       ),
-                    ],
-                    if (post.publishedAt != null) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        formatDate(post.publishedAt!),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(left: 8, top: 2),
+                      child: Icon(Icons.north_east, size: 18),
+                    ),
                   ],
                 ),
               ),

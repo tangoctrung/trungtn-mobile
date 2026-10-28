@@ -43,6 +43,7 @@ Tài liệu: [local_auth](https://pub.dev/packages/local_auth), [Android setup](
 - **Lưu trữ**: nhấn icon thư mục có dấu cộng để tạo thư mục; nhấn một lần để chọn, nhấn đúp để mở. Có thể tạo thư mục con.
 - Trong thư mục, nhấn **+** để thêm văn bản thường, văn bản có định dạng (đậm/nghiêng/danh sách…), nhiều ảnh, video hoặc tệp bất kỳ. Nhấn **Lưu** trong editor để ghi lại thay đổi. Rời editor khi chưa lưu sẽ có xác nhận.
 - Ảnh có thể phóng to, video có phát/tạm dừng và tua. Các tệp khác có thể mở bằng ứng dụng hỗ trợ trên thiết bị.
+- Vuốt từ mép trái sang phải để quay lại: từ thư mục về thư mục cha, từ trình xem/soạn thảo về màn trước. Ghi chú chưa lưu vẫn yêu cầu xác nhận; vuốt ở màn gốc không thoát app.
 - Metadata và ghi chú lưu trong `Application Support/vault/index.json`; file nhập được sao chép vào `vault/files/`, nên không phụ thuộc file tạm của trình chọn file. Các lần ghi được xếp hàng và index được thay bằng thao tác rename sau khi ghi xong. Dữ liệu vẫn còn sau khi mở lại app.
 - Màn hình và hộp thoại bên trong được đặt trong Navigator riêng, giữ trạng thái dưới lớp khóa khi ứng dụng xuống nền. Ghi chú đang soạn hoặc lần nhập tệp không bị mất do giao diện xác thực được dựng lại. Video tự tạm dừng khi ứng dụng không còn ở foreground.
 
@@ -63,21 +64,21 @@ dart run tool/check_discover_sources.dart
 
 Cần dừng app và chạy build mới sau khi cài các plugin native; hot reload không đủ để nạp trình chọn file, phát video hoặc mở file.
 
-## Giao diện đen trắng
+## Giao diện và ảnh đại diện thư mục
 
-Theme dùng đen, trắng và xám, thẻ và nút bo tròn. Font Be Vietnam Pro được đóng gói cùng ứng dụng (400/500/600/700), nội dung chính 16–17px. Thanh điều hướng nổi cao 60px, icon 30px; mục đang chọn có nền trắng và tên bên cạnh icon.
+Giao diện dùng Roboto đóng gói offline, nền trắng và thông tin phụ màu xám. Nội dung chính 16–17px, tiêu đề nội dung 18px, thông tin phụ 13px. Khoảng cách chữ, dòng và nhóm được thu gọn để bố cục liền mạch hơn.
 
-Kho mới được thêm 6 thư mục mẫu, mỗi thư mục có văn bản thường, editor, ảnh, PDF và video để xem giao diện và thử sửa văn bản. Dữ liệu mẫu được bổ sung một lần khi cập nhật phiên bản demo; kho đã dùng trước đó cũng nhận được các mẫu mới. Nội dung đã lưu không bị ghi đè. Các nguồn Khám phá vẫn dùng dữ liệu online.
+Bottom bar nổi bo tròn trên nền đen, cao 60px, icon 30px. Tab chọn có nền trắng cao 52px, chiều rộng thu còn 2/3 phần focus cũ và hiện tên cạnh icon; hai tab còn lại chỉ hiện icon. Hiệu ứng chuyển tab nhẹ, không có splash/highlight mặc định.
 
-Font: [Google Fonts — Be Vietnam Pro](https://github.com/google/fonts/tree/main/ofl/bevietnampro), giấy phép tại `assets/fonts/OFL.txt`. Chạy lại ứng dụng để nạp font và dữ liệu mẫu cho kho mới.
+Mỗi thư mục có ảnh đại diện: ưu tiên ảnh do người dùng chọn, sau đó ảnh đầu tiên trong thư mục, cuối cùng là ảnh mẫu đóng gói trong app. Nhấn nút camera trên thumbnail, hoặc icon **Đổi ảnh đại diện** khi đang ở trong thư mục, rồi chọn **Chọn ảnh từ máy**. Ảnh được sao chép vào `vault/covers/` và đường dẫn tương đối được lưu trong metadata thư mục, nên không phụ thuộc file tạm của trình chọn ảnh. Chọn **Dùng ảnh mặc định** để đặt lại. Ảnh cũng cập nhật ở màn Home.
 
-### Animation và thư mục mẫu đầy đủ
+Font: [Google Fonts — Roboto](https://github.com/googlefonts/roboto-2), giấy phép tại `assets/fonts/roboto/LICENSE.txt`.
 
-Tab đang chọn có nền trắng trượt trong 320ms và icon nảy nhẹ khi bấm. Phần nền focus giữ chiều rộng bằng 2/3 bản trước, cao 52px trong thanh 60px, cách mép trên/dưới 4px. Hiệu ứng splash/highlight và phản hồi mặc định khi bấm đã tắt; hiệu ứng trượt vẫn được giữ. Hiệu ứng tôn trọng cài đặt giảm chuyển động của thiết bị.
+## Dữ liệu mẫu Lưu trữ
 
-Sáu thư mục mẫu: Cá nhân, Công việc, Ý tưởng, Tài liệu, Hình ảnh, Video. Mỗi thư mục có đủ năm loại nội dung. Ảnh JPEG, file PDF và video MP4 được đóng gói trong `assets/demo/`, sao chép vào vùng lưu trữ riêng và mở được offline. Nguồn media mẫu từ bộ tài liệu Flutter, xem `assets/demo/SOURCES.txt`.
+Sáu thư mục mẫu: Cá nhân, Công việc, Ý tưởng, Tài liệu, Hình ảnh, Video. Mỗi thư mục có văn bản thường, editor có định dạng, ảnh JPEG, file PDF và video MP4. Media được đóng gói trong `assets/demo/` và dùng được offline; nguồn tại `assets/demo/SOURCES.txt`.
 
-Trong thư mục có các nút thêm nhanh **Text**, **Editor**, **Ảnh**, **File**, **Video**; nút tạo thư mục và menu dấu **+** vẫn có sẵn. Nhấn đúp để mở thư mục. Khởi động lại app sau cập nhật để nạp asset và bổ sung dữ liệu mẫu cho kho hiện tại.
+Các nút thêm nhanh **Text**, **Editor**, **Ảnh**, **File**, **Video**, nút tạo thư mục và menu dấu **+** vẫn có sẵn. Nhấn đúp để mở thư mục. Dữ liệu mẫu được bổ sung một lần cho cả kho cũ; nội dung đã lưu không bị ghi đè.
 
 ## Thời hạn phiên xác thực
 
@@ -86,3 +87,7 @@ Nhấn icon khóa trên topbar để chọn **Khóa luôn**, **3 phút**, **15 p
 Phiên còn hạn được giữ khi xuống nền hoặc đóng/mở lại app. App kiểm tra hạn ngay khi quay về foreground; khi đang sử dụng, timer sẽ yêu cầu xác thực khi hết hạn. Màn hình đang xem và nội dung soạn thảo được giữ dưới lớp khóa. Xác thực lại thành công sẽ bắt đầu một phiên mới với lựa chọn đã lưu.
 
 Lựa chọn và mốc xác thực được lưu riêng trong `Application Support/lock_session.json`, ghi theo hàng đợi và thay file sau khi ghi hoàn tất. Mốc tương lai, phiên hết hạn hoặc dữ liệu không hợp lệ không mở được màn chính. Nếu chưa chọn mốc, hành vi mặc định vẫn là khóa khi xuống nền và xác thực khi mở lại. Không có mật mã hay dữ liệu sinh trắc học trong file phiên.
+
+## Card nội dung trong thư mục
+
+Trong mỗi thư mục, nội dung hiển thị thành lưới **2 card mỗi hàng**. Card text/editor có tiêu đề và xem trước tối đa 3 dòng; khi bị cắt có nút **Xem thêm** mở đầy đủ trong editor. Card ảnh hiển thị ảnh và tên; card file/video có hình đại diện định dạng, tên và dung lượng, nhấn để mở. Các nút thêm nội dung và ảnh đại diện thư mục tiếp tục sử dụng như trước.

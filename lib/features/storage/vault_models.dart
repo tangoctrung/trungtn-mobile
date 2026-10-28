@@ -6,17 +6,28 @@ class VaultFolder {
     required this.name,
     required this.createdAt,
     this.parentId,
+    this.coverRelativePath,
   });
 
   final String id;
   final String name;
   final String? parentId;
   final DateTime createdAt;
+  final String? coverRelativePath;
+
+  VaultFolder withCover(String? relativePath) => VaultFolder(
+    id: id,
+    name: name,
+    createdAt: createdAt,
+    parentId: parentId,
+    coverRelativePath: relativePath,
+  );
 
   factory VaultFolder.fromJson(Map<String, dynamic> json) => VaultFolder(
     id: json['id'] as String,
     name: json['name'] as String,
     parentId: json['parentId'] as String?,
+    coverRelativePath: json['coverRelativePath'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
   );
 
@@ -24,6 +35,7 @@ class VaultFolder {
     'id': id,
     'name': name,
     'parentId': parentId,
+    'coverRelativePath': coverRelativePath,
     'createdAt': createdAt.toIso8601String(),
   };
 }

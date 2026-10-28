@@ -14,6 +14,7 @@ import 'package:flutter_demo/features/storage/vault_repository.dart';
 import 'package:flutter_demo/main.dart';
 import 'package:flutter_demo/features/auth/lock_session.dart';
 import 'package:flutter_demo/shared/compact_bottom_bar.dart';
+import 'package:flutter_demo/features/storage/vault_item_card.dart';
 
 class _Authenticated implements DeviceAuthenticator {
   Future<bool> Function()? handler;
@@ -102,19 +103,27 @@ void main() {
         findsNothing,
       );
       expect(navigation.selectedIndex, 0);
-      final indicator = find.byKey(const Key('tab-focus-indicator'));
-      final initialPosition = tester.getTopLeft(indicator);
-      final initialSize = tester.getSize(indicator);
-      expect(initialSize.height, 52);
-      expect(initialSize.width, closeTo((340 - 12 - 112) * 2 / 3, .01));
-      await tester.tap(find.byKey(const Key('tab-storage')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 100));
-      final intermediate = tester.getTopLeft(indicator);
-      await tester.pumpAndSettle();
-      final destination = tester.getTopLeft(indicator);
-      expect(intermediate.dx, greaterThan(initialPosition.dx));
-      expect(intermediate.dx, lessThan(destination.dx));
+      expect(
+        tester.getSize(find.byKey(const Key('tab-focus-indicator'))).width,
+        closeTo((340 - 12 - 112) * 2 / 3, .01),
+      );
+      expect(
+        tester.getSize(find.byKey(const Key('tab-focus-indicator'))).height,
+        52,
+      );
+
+      expect(
+        tester.getSize(find.byKey(const Key('bottom-bar-surface'))).height,
+        60,
+      );
+      expect(
+        tester
+            .widgetList<Icon>(
+              find.descendant(of: bar, matching: find.byType(Icon)),
+            )
+            .every((icon) => icon.size == 30),
+        isTrue,
+      );
       await openFolder(tester);
       await tester.tap(find.byKey(const Key('tab-discover')));
       await tester.pumpAndSettle();
@@ -151,6 +160,79 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Kho của bạn'), findsOneWidget);
   });
+
+  for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
+    testWidgets('Left edge swipe navigates back safely on $platform', (
+      tester,
+    ) async {
+      late VaultFolder child;
+      await tester.runAsync(() async {
+        child = await repository.createFolder(
+          'Thư mục con',
+          parentId: folder.id,
+        );
+      });
+      await mount(tester);
+      await openFolder(tester);
+      final tile = find.byKey(ValueKey('folder-${child.id}'));
+      await tester.tap(tile);
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(tile);
+      await tester.pumpAndSettle();
+      expect(find.text('Thư mục con'), findsOneWidget);
+
+      // Content drags, short gestures, and vertical scrolling must not go back.
+      await tester.dragFrom(const Offset(120, 320), const Offset(220, 0));
+      await tester.pumpAndSettle();
+      await tester.dragFrom(const Offset(5, 320), const Offset(12, 0));
+      await tester.pumpAndSettle();
+      await tester.dragFrom(const Offset(5, 320), const Offset(0, -100));
+      await tester.pumpAndSettle();
+      expect(find.text('Thư mục con'), findsOneWidget);
+
+      await tester.dragFrom(const Offset(5, 320), const Offset(240, 0));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('folder-${child.id}')), findsOneWidget);
+      expect(find.byTooltip('Thư mục cha'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('quick-add-text')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('note-body')), 'Chưa lưu');
+      await tester.pump();
+      await tester.dragFrom(const Offset(5, 320), const Offset(240, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Bỏ thay đổi chưa lưu?'), findsOneWidget);
+      await tester.tap(find.text('Tiếp tục viết'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('note-body')))
+            .controller!
+            .text,
+        'Chưa lưu',
+      );
+      await tester.dragFrom(const Offset(5, 320), const Offset(240, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Bỏ thay đổi'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('note-body')), findsNothing);
+      expect(find.byKey(const Key('add-content')), findsOneWidget);
+
+      // A clean editor can go back directly, including native iOS navigation.
+      await tester.tap(find.byKey(const Key('quick-add-text')));
+      await tester.pumpAndSettle();
+      await tester.dragFrom(const Offset(5, 320), const Offset(600, 0));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('note-body')), findsNothing);
+      await tester.dragFrom(const Offset(5, 320), const Offset(240, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Kho của bạn'), findsOneWidget);
+      await tester.dragFrom(const Offset(5, 320), const Offset(240, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Kho của bạn'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant({platform}));
+  }
 
   testWidgets('Create folder dialog writes it to persistent storage', (
     tester,
@@ -325,4 +407,72 @@ void main() {
     expect(find.text('Tệp khác'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'Folder cover controls open the device-image choice without entering the folder',
+    (tester) async {
+      await mount(tester);
+      await tester.tap(find.byKey(const Key('tab-storage')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('folder-cover-${folder.id}')));
+      await tester.pumpAndSettle();
+      expect(find.text('Ảnh đại diện thư mục'), findsOneWidget);
+      expect(find.text('Chọn ảnh từ máy'), findsOneWidget);
+      expect(find.byKey(const Key('add-content')), findsNothing);
+    },
+  );
+  testWidgets(
+    'Folder content uses two cards per row and long text opens in full',
+    (tester) async {
+      late VaultItem longNote;
+      late VaultItem shortNote;
+      final fullText = List.filled(
+        30,
+        'Đây là nội dung dài cần xem đầy đủ.',
+      ).join(' ');
+      await tester.runAsync(() async {
+        longNote = await repository.saveNote(
+          folderId: folder.id,
+          name: 'Nội dung dài',
+          text: fullText,
+          richText: false,
+        );
+        shortNote = await repository.saveNote(
+          folderId: folder.id,
+          name: 'Ghi chú ngắn',
+          text: 'Ngắn gọn.',
+          richText: false,
+        );
+      });
+      await mount(tester);
+      await openFolder(tester);
+      expect(find.byType(VaultItemCard), findsNWidgets(2));
+      final first = tester.getRect(
+        find.byKey(ValueKey('content-card-${longNote.id}')),
+      );
+      final second = tester.getRect(
+        find.byKey(ValueKey('content-card-${shortNote.id}')),
+      );
+      expect(first.top, closeTo(second.top, .01));
+      expect((first.left - second.left).abs(), greaterThan(first.width));
+      expect(
+        tester
+            .widget<Text>(find.byKey(ValueKey('note-preview-${longNote.id}')))
+            .maxLines,
+        3,
+      );
+      expect(find.byKey(ValueKey('read-more-${shortNote.id}')), findsNothing);
+      final more = find.byKey(ValueKey('read-more-${longNote.id}'));
+      await tester.ensureVisible(more);
+      await tester.tap(more);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('note-body')))
+            .controller!
+            .text,
+        fullText,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

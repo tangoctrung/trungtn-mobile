@@ -169,6 +169,82 @@ class VaultRepository extends ChangeNotifier {
     return entry;
   });
 
+  Future<VaultFolder> setFolderCover({
+    required String folderId,
+    required File source,
+    required String name,
+  }) => _serialize(() async {
+    final original = folder(folderId);
+    final extension = p.extension(name).toLowerCase();
+    if (![
+      '.jpg',
+      '.jpeg',
+      '.png',
+      '.webp',
+      '.gif',
+      '.heic',
+      '.heif',
+      '.bmp',
+      '.avif',
+    ].contains(extension)) {
+      throw ArgumentError('Hãy chọn một hình ảnh.');
+    }
+    final relative = p.join('covers', '${_id()}$extension');
+    final target = _resolveFile(relative);
+    await target.parent.create(recursive: true);
+    try {
+      await source.copy(target.path);
+      if (await target.length() == 0) {
+        throw const FileSystemException('Empty image');
+      }
+      final updated = original.withCover(relative);
+      await _commit(
+        _folders
+            .map((entry) => entry.id == folderId ? updated : entry)
+            .toList(),
+        _items,
+      );
+      await _removeOwnedCover(original.coverRelativePath);
+      return updated;
+    } catch (_) {
+      if (await target.exists()) await target.delete();
+      rethrow;
+    }
+  });
+
+  Future<void> resetFolderCover(String folderId) => _serialize(() async {
+    final original = folder(folderId);
+    await _commit(
+      _folders
+          .map((entry) => entry.id == folderId ? entry.withCover(null) : entry)
+          .toList(),
+      _items,
+    );
+    await _removeOwnedCover(original.coverRelativePath);
+  });
+
+  Future<void> _removeOwnedCover(String? relative) async {
+    if (relative == null || !relative.startsWith('covers${p.separator}')) {
+      return;
+    }
+    try {
+      final old = _resolveFile(relative);
+      if (await old.exists()) await old.delete();
+    } catch (_) {
+      // Cover cleanup must not turn a successful metadata update into a failure.
+    }
+  }
+
+  File? folderCoverFile(VaultFolder folder) {
+    if (folder.coverRelativePath != null) {
+      return _resolveFile(folder.coverRelativePath!);
+    }
+    final images = _items.where(
+      (item) => item.folderId == folder.id && item.type == VaultItemType.image,
+    );
+    return images.isEmpty ? null : fileFor(images.first);
+  }
+
   Future<VaultItem> importFile({
     required String folderId,
     required File source,
@@ -222,7 +298,12 @@ class VaultRepository extends ChangeNotifier {
 
   File fileFor(VaultItem item) {
     final relative = item.relativePath;
-    if (_directory == null || relative == null || p.isAbsolute(relative)) {
+    if (relative == null) throw StateError('Không tìm thấy tệp.');
+    return _resolveFile(relative);
+  }
+
+  File _resolveFile(String relative) {
+    if (_directory == null || p.isAbsolute(relative)) {
       throw StateError('Không tìm thấy tệp.');
     }
     final target = p.normalize(p.join(_directory!.path, relative));

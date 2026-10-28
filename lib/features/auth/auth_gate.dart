@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../shared/edge_back_gesture.dart';
 import '../home/home_screen.dart';
 import 'device_auth_service.dart';
 import 'lock_session.dart';
@@ -176,12 +177,18 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
                   enabled: unlocked,
                   child: LockSessionScope(
                     controller: _session,
-                    child: Navigator(
-                      key: _sessionNavigator,
-                      onGenerateRoute: (_) => MaterialPageRoute<void>(
-                        builder: (_) =>
-                            widget.homeBuilder?.call(_lock) ??
-                            HomeScreen(onLock: _lock),
+                    child: EdgeBackGesture(
+                      onBack: () async {
+                        // Respect folder navigation and unsaved editor guards.
+                        await _sessionNavigator.currentState?.maybePop();
+                      },
+                      child: Navigator(
+                        key: _sessionNavigator,
+                        onGenerateRoute: (_) => MaterialPageRoute<void>(
+                          builder: (_) =>
+                              widget.homeBuilder?.call(_lock) ??
+                              HomeScreen(onLock: _lock),
+                        ),
                       ),
                     ),
                   ),
@@ -239,13 +246,13 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
                     padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
                       color: colors.surface,
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: colors.outlineVariant),
                     ),
                     child: Column(
                       children: [
                         CircleAvatar(
-                          radius: 48,
+                          radius: 36,
                           backgroundColor: failed
                               ? colors.errorContainer
                               : colors.primaryContainer,
@@ -255,7 +262,7 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
                                 : isIOS
                                 ? Icons.face_retouching_natural
                                 : Icons.fingerprint_rounded,
-                            size: 52,
+                            size: 40,
                             color: failed ? colors.error : colors.primary,
                           ),
                         ),

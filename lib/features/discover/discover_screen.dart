@@ -29,78 +29,58 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           : _newsFilter == 2
           ? [controller.world]
           : [controller.domestic, controller.world];
+      final theme = Theme.of(context);
       return RefreshIndicator(
         onRefresh: controller.refresh,
         child: ListView(
           key: const PageStorageKey('discover-list'),
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
           children: [
-            Text(
-              'Nhịp sống hôm nay',
-              style: Theme.of(context).textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Thời tiết, thị trường và những câu chuyện mới.',
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (index, name) in [
+                    'Tất cả',
+                    'Trong nước',
+                    'Thế giới',
+                  ].indexed)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(name),
+                        showCheckmark: false,
+                        selected: _newsFilter == index,
+                        labelStyle: TextStyle(
+                          color: _newsFilter == index
+                              ? Colors.white
+                              : theme.colorScheme.onSurface,
+                        ),
+                        onSelected: (_) => setState(() => _newsFilter = index),
+                      ),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(height: 22),
-            WeatherCard(controller: controller),
-            const SectionTitle('Thị trường'),
-            PriceBoardCard(
-              title: 'Giá vàng',
-              icon: Icons.diamond_outlined,
-              resource: controller.gold,
-              sourceUrl: Uri.parse('https://btmc.vn/'),
-            ),
-            const SizedBox(height: 14),
-            PriceBoardCard(
-              title: 'Giá xăng dầu',
-              icon: Icons.local_gas_station_outlined,
-              resource: controller.fuel,
-              sourceUrl: Uri.parse('https://www.petrolimex.com.vn/'),
-            ),
-            const SectionTitle('Dòng tin'),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final (index, name) in [
-                  'Tất cả',
-                  'Trong nước',
-                  'Thế giới',
-                ].indexed)
-                  ChoiceChip(
-                    label: Text(name),
-                    selected: _newsFilter == index,
-                    labelStyle: TextStyle(
-                      color: _newsFilter == index
-                          ? Colors.white
-                          : Theme.of(context).colorScheme.onSurface,
-                    ),
-                    onSelected: (_) => setState(() => _newsFilter = index),
-                  ),
-              ],
-            ),
             const SizedBox(height: 16),
+            Text('Nhịp sống hôm nay', style: theme.textTheme.titleLarge),
+            const SizedBox(height: 12),
+            WeatherCard(controller: controller),
+            const SizedBox(height: 10),
+            MarketOverview(controller: controller),
+            const SectionTitle('Tin mới'),
             if (resources.any((resource) => resource.loading))
               const Padding(
                 padding: EdgeInsets.only(bottom: 16),
-                child: LinearProgressIndicator(),
+                child: LinearProgressIndicator(minHeight: 2),
               ),
             for (final resource in resources.where(
               (resource) => resource.error != null,
             ))
               Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  resource.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                ),
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(resource.error!, style: theme.textTheme.bodySmall),
               ),
             if (posts.isEmpty &&
                 resources.every((resource) => !resource.loading))

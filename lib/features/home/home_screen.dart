@@ -11,6 +11,7 @@ import '../storage/vault_models.dart';
 import '../storage/vault_repository.dart';
 import 'home_dashboard.dart';
 import '../../shared/compact_bottom_bar.dart';
+import '../../shared/app_theme.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({
@@ -66,9 +67,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(
-        ['Home', 'Lưu trữ', 'Khám phá'][_index],
-        style: const TextStyle(fontWeight: FontWeight.w600),
+      title: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.video_library, size: 28, color: AppTheme.accent),
+          SizedBox(width: 7),
+          Text(
+            'TrungTN',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -.6,
+            ),
+          ),
+        ],
       ),
       actions: [
         Padding(

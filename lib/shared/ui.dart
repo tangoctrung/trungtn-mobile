@@ -41,7 +41,7 @@ class SurfaceCard extends StatelessWidget {
   const SurfaceCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(16),
   });
   final Widget child;
   final EdgeInsetsGeometry padding;
@@ -51,7 +51,7 @@ class SurfaceCard extends StatelessWidget {
     color: Theme.of(context).colorScheme.surface,
     clipBehavior: Clip.antiAlias,
     shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: BorderRadius.circular(12),
       side: BorderSide(
         color: Theme.of(context).colorScheme.outlineVariant
             .withValues(alpha: .55),
@@ -69,14 +69,14 @@ class SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 24, bottom: 12),
+    padding: const EdgeInsets.only(top: 12, bottom: 6),
     child: Row(
       children: [
         Expanded(
           child: Text(
             title,
             style: Theme.of(context).textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w600),
+                ?.copyWith(fontWeight: FontWeight.w700),
           ),
         ),
         if (action != null)
