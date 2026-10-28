@@ -1,0 +1,4 @@
+Demo image: https://flutter.github.io/assets-for-api-docs/assets/widgets/owl.jpg
+Demo video: https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4
+Image/video source repository: https://github.com/flutter/assets-for-api-docs
+PDF: generated sample document for this application.
