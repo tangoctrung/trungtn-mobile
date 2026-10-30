@@ -26,7 +26,8 @@ class DiscoverService {
       'latitude': '${city.latitude}',
       'longitude': '${city.longitude}',
       'current': 'temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m',
-      'timezone': 'Asia/Ho_Chi_Minh',
+      'timezone': 'auto',
+      'timeformat': 'unixtime',
     });
     final json = jsonDecode(await _get(uri)) as Map<String, dynamic>;
     final current = json['current'] as Map<String, dynamic>;
@@ -37,7 +38,10 @@ class DiscoverService {
       humidity: (current['relative_humidity_2m'] as num).toInt(),
       windSpeed: (current['wind_speed_10m'] as num).toDouble(),
       code: (current['weather_code'] as num).toInt(),
-      observedAt: DateTime.parse('${current['time']}+07:00'),
+      observedAt: DateTime.fromMillisecondsSinceEpoch(
+        (current['time'] as num).toInt() * 1000,
+        isUtc: true,
+      ),
     );
   }
 

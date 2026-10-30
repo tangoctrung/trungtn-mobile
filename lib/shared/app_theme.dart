@@ -47,6 +47,11 @@ abstract final class AppTheme {
       fontFamily: 'Roboto',
       colorScheme: colors,
       scaffoldBackgroundColor: canvas,
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: ink,
+        selectionColor: Color(0x330F0F0F),
+        selectionHandleColor: ink,
+      ),
       textTheme: const TextTheme(
         displaySmall: TextStyle(
           fontSize: 32,

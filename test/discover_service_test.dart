@@ -7,6 +7,16 @@ import 'package:http/testing.dart';
 import 'package:flutter_demo/features/discover/discover_controller.dart';
 import 'package:flutter_demo/features/discover/discover_models.dart';
 import 'package:flutter_demo/features/discover/discover_service.dart';
+import 'package:flutter_demo/features/discover/weather_location.dart';
+
+class _Location implements WeatherLocationProvider {
+  @override
+  Future<WeatherCity> currentLocation({
+    required bool requestPermission,
+  }) async => WeatherCity.choices.first;
+  @override
+  Future<bool> openSettings({required bool locationServices}) async => true;
+}
 
 http.Response jsonResponse(Object data) => http.Response(
   jsonEncode(data),
@@ -28,16 +38,17 @@ Map<String, Object> weather(double temperature) => {
     'relative_humidity_2m': 75,
     'wind_speed_10m': 12,
     'weather_code': 3,
-    'time': '2026-10-28T08:30',
+    'time': DateTime.utc(2026, 10, 28, 1, 30).millisecondsSinceEpoch ~/ 1000,
   },
 };
 
 void main() {
-  test('Weather requests selected coordinates and parses the Vietnam observation time', () async {
+  test('Weather requests selected coordinates and parses the UTC observation timestamp', () async {
     final service = DiscoverService(
       client: MockClient((request) async {
         expect(request.url.queryParameters['latitude'], '21.0285');
-        expect(request.url.queryParameters['timezone'], 'Asia/Ho_Chi_Minh');
+        expect(request.url.queryParameters['timezone'], 'auto');
+        expect(request.url.queryParameters['timeformat'], 'unixtime');
         return jsonResponse(weather(28.5));
       }),
     );
@@ -146,6 +157,7 @@ void main() {
     'One unavailable source does not prevent other feeds from loading',
     () async {
       final controller = DiscoverController(
+        locationProvider: _Location(),
         service: DiscoverService(
           client: MockClient((request) async {
             if (request.url.host == 'api.open-meteo.com') {

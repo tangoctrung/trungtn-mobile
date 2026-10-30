@@ -5,7 +5,7 @@ import '../../shared/ui.dart';
 import '../discover/discover_controller.dart';
 import '../discover/discover_widgets.dart';
 import '../storage/item_viewer_screen.dart';
-import '../storage/folder_cover.dart';
+import '../storage/vault_actions.dart';
 import '../storage/storage_screen.dart';
 import '../storage/vault_models.dart';
 import '../storage/vault_repository.dart';
@@ -74,7 +74,7 @@ class HomeDashboard extends StatelessWidget {
                     child: FolderTile(
                       folder: folders[index],
                       repository: repository,
-                      onChangeCover: () => chooseFolderCover(
+                      onMore: () => showFolderActions(
                         context,
                         repository,
                         folders[index],

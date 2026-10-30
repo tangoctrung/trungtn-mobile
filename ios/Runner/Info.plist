@@ -30,6 +30,8 @@
 	<string>Sử dụng Face ID để xác thực danh tính và mở khóa ứng dụng TrungTN.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Chọn ảnh và video để lưu vào thư mục của bạn trong TrungTN.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Sử dụng vị trí hiện tại của bạn để hiển thị thời tiết tại nơi bạn đang ở.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../shared/ui.dart';
+import 'image_gallery_screen.dart';
 import 'note_editor_screen.dart';
 import 'vault_models.dart';
 import 'vault_repository.dart';
@@ -24,6 +25,8 @@ Future<void> openVaultItem(
               richText: item.type == VaultItemType.richText,
               item: item,
             )
+          : item.type == VaultItemType.image
+          ? ImageGalleryScreen(repository: repository, initialItem: item)
           : ItemViewerScreen(repository: repository, item: item),
     ),
   );
@@ -128,25 +131,6 @@ class _ItemViewerScreenState extends State<ItemViewerScreen>
                 action: TextButton(
                   onPressed: _openExternally,
                   child: const Text('Mở bằng ứng dụng khác'),
-                ),
-              ),
-            )
-          : item.type == VaultItemType.image
-          ? Center(
-              child: InteractiveViewer(
-                minScale: .5,
-                maxScale: 5,
-                child: Image.file(
-                  _file!,
-                  errorBuilder: (_, _, _) => EmptyState(
-                    icon: Icons.broken_image_outlined,
-                    title: 'Định dạng ảnh chưa được hỗ trợ',
-                    message: 'Hãy thử mở ảnh bằng ứng dụng khác.',
-                    action: TextButton(
-                      onPressed: _openExternally,
-                      child: const Text('Mở ảnh'),
-                    ),
-                  ),
                 ),
               ),
             )

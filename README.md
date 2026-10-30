@@ -42,17 +42,23 @@ Tài liệu: [local_auth](https://pub.dev/packages/local_auth), [Android setup](
 - **Home** tổng hợp thời tiết, thống kê lưu trữ, thư mục, nội dung gần đây, giá vàng, giá xăng và tin mới.
 - **Lưu trữ**: nhấn icon thư mục có dấu cộng để tạo thư mục; nhấn một lần để chọn, nhấn đúp để mở. Có thể tạo thư mục con.
 - Trong thư mục, nhấn **+** để thêm văn bản thường, văn bản có định dạng (đậm/nghiêng/danh sách…), nhiều ảnh, video hoặc tệp bất kỳ. Nhấn **Lưu** trong editor để ghi lại thay đổi. Rời editor khi chưa lưu sẽ có xác nhận.
+- Toolbar editor dùng icon trắng trên nền đen cho định dạng đang chọn, icon đen khi chưa chọn; vùng chọn chữ có nền xám trong suốt. Chỉ thay đổi nội dung/định dạng tài liệu mới được xem là chỉnh sửa; đổi focus hoặc vị trí con trỏ không hiện cảnh báo bỏ thay đổi, undo về nội dung ban đầu cũng không cảnh báo.
 - Ảnh có thể phóng to, video có phát/tạm dừng và tua. Các tệp khác có thể mở bằng ứng dụng hỗ trợ trên thiết bị.
+- Card Text/Editor có nút **Sao chép nội dung** để copy toàn bộ văn bản (kể cả phần bị rút gọn). Mở ảnh rồi vuốt trái để xem ảnh tiếp, vuốt phải để xem ảnh trước trong cùng thư mục, theo thứ tự ảnh trên lưới. Tên ảnh và bộ đếm cập nhật theo ảnh đang xem; vẫn hỗ trợ zoom và vuốt từ mép trái để Back.
 - Vuốt từ mép trái sang phải để quay lại: từ thư mục về thư mục cha, từ trình xem/soạn thảo về màn trước. Ghi chú chưa lưu vẫn yêu cầu xác nhận; vuốt ở màn gốc không thoát app.
-- Metadata và ghi chú lưu trong `Application Support/vault/index.json`; file nhập được sao chép vào `vault/files/`, nên không phụ thuộc file tạm của trình chọn file. Các lần ghi được xếp hàng và index được thay bằng thao tác rename sau khi ghi xong. Dữ liệu vẫn còn sau khi mở lại app.
+- Thư mục, ghi chú và metadata lưu bằng **SQLite** (`sqflite`) tại `Application Support/vault/vault.db`, có transaction và khóa ngoại. File nhập được sao chép vào `vault/files/`, ảnh đại diện vào `vault/covers/`. Kho JSON cũ tự chuyển sang SQLite một lần, giữ nguyên ID, định dạng ghi chú và đường dẫn tệp; `index.json` được giữ làm bản sao chuyển đổi và không nhập lại sau khi xóa dữ liệu.
+- Màn Lưu trữ chỉ hiển thị thư mục, không có “Gần đây”. Nhấn giữ thư mục ở Home hoặc Lưu trữ để đổi tên, đổi ảnh đại diện hoặc xóa; thumbnail thư mục không có nút camera/ba chấm. Với card nội dung, nhấn **…** hoặc giữ lâu để đổi tên, sửa ghi chú, thay ảnh/video/file hoặc xóa. Xóa thư mục có xác nhận và xóa cả thư mục con; tệp riêng được dọn sau khi transaction hoàn tất, tệp dùng chung chỉ xóa khi không còn được tham chiếu.
+- Xóa nhiều: trong **Lưu trữ**, nhấn icon **Chọn nhiều** trên hàng tiêu đề (ở kho gốc lẫn trong thư mục), hoặc mở menu của một mục rồi chọn **Chọn nhiều**. Chạm để chọn/bỏ chọn thư mục, text/editor, ảnh, video và file trong vị trí hiện tại; có **Chọn tất cả/Bỏ chọn tất cả**. Thanh thao tác luôn hiện khi cuộn. Nhấn **Xóa** rồi xác nhận; hộp thoại tính cả thư mục con và nội dung bên trong, không đếm trùng. Toàn bộ lựa chọn được xóa trong một transaction SQLite; lỗi sẽ rollback toàn bộ trước khi dọn file, dung lượng được cập nhật sau khi hoàn tất. Back hoặc nút **×** thoát chế độ chọn trước khi quay về thư mục cha.
+- Thẻ **Đã dùng** hiển thị dung lượng thực tế của kho trên máy, cập nhật sau thêm/sửa/xóa. Nhấn để xem tệp, ảnh đại diện, ghi chú/dữ liệu ứng dụng và dữ liệu khác cùng số lượng từng loại. Tổng được tính từ kích thước file thực tế, gồm SQLite/WAL và bản sao chuyển đổi; không cộng trùng file demo dùng chung hoặc cộng lại text đã nằm trong database.
 - Màn hình và hộp thoại bên trong được đặt trong Navigator riêng, giữ trạng thái dưới lớp khóa khi ứng dụng xuống nền. Ghi chú đang soạn hoặc lần nhập tệp không bị mất do giao diện xác thực được dựng lại. Video tự tạm dừng khi ứng dụng không còn ở foreground.
+- Trên Android/iOS, chuyển focus, mở/đóng editor và trạng thái `hidden` tạm thời không thu hồi phiên xác thực. Nội dung vẫn được che khi hidden; chính sách khóa khi xuống nền được áp dụng ở `paused`. Khóa thủ công và thời hạn tính từ lần mở khóa gần nhất vẫn được giữ nguyên.
 
 ### Nguồn Khám phá
 
-- Thời tiết: [Open-Meteo](https://open-meteo.com/en/docs), mặc định TP.HCM; đổi giữa các thành phố bằng menu trên thẻ thời tiết.
+- Thời tiết: [Open-Meteo](https://open-meteo.com/en/docs), mặc định lấy tọa độ hiện tại qua `geolocator` sau khi mở khóa app. Chỉ xin quyền khi dùng app, đọc vị trí một lần mỗi lần tải lại, không theo dõi nền. Quyền vị trí chỉ được tự hỏi lần đầu trong phiên; các lần refresh tiếp theo không tự hỏi lại. Khi từ chối/tắt GPS có thông báo, nút thử lại/cài đặt và menu chọn thành phố thủ công; chọn **Vị trí hiện tại** để quay về GPS. Phản hồi cũ không ghi đè vị trí mới. Thời điểm quan trắc dùng Unix timestamp UTC, hiển thị theo giờ thiết bị.
 - Giá vàng: [API công khai BTMC](https://btmc.vn/thong-tin/tai-lieu-api/api-gia-vang-17784.html), hiển thị giá mua/bán VND/chỉ cho SJC và nhẫn tròn trơn, chọn bản ghi mới nhất cho từng sản phẩm.
 - Giá xăng dầu: dữ liệu bảng giá công khai mà [website Petrolimex](https://www.petrolimex.com.vn/) đang sử dụng; hiển thị hai vùng bằng VND/lít, không trộn giá dầu mazut tính theo kg.
-- Bài viết trong nước/thế giới: [RSS VnExpress](https://vnexpress.net/rss), hiển thị tiêu đề, tóm tắt, ảnh, thời gian và nguồn. Nhấn bài viết để mở bản gốc.
+- Bài viết trong nước/thế giới: [RSS VnExpress](https://vnexpress.net/rss), hiển thị tiêu đề, tóm tắt, ảnh, thời gian và nguồn. Nhấn bài viết ở Home hoặc Khám phá để đọc bản gốc ngay trong app qua WebView (Android/iOS). Có tiến trình tải, tải lại và thử lại khi lỗi mạng; nút Back/vuốt mép trái quay lại lịch sử trang hoặc danh sách tin, nút × đóng bài viết. Danh sách giữ vị trí cuộn; trang đọc vẫn nằm dưới lớp khóa của app.
 
 Kéo xuống ở Home/Khám phá để cập nhật. Giá có thời gian cập nhật của nguồn và thời gian tải; nguồn có thể trả bản ghi của kỳ trước. Các nguồn được tải độc lập, có timeout và thông báo lỗi riêng. Khi tải lại thất bại, dữ liệu cũ trong phiên được giữ cùng thông báo. Không có số liệu hay bài viết mẫu trong app. API công khai của nhà cung cấp có thể thay đổi cấu trúc hoặc khả năng truy cập; adapter nằm trong `lib/features/discover/discover_service.dart`.
 
@@ -64,13 +70,15 @@ dart run tool/check_discover_sources.dart
 
 Cần dừng app và chạy build mới sau khi cài các plugin native; hot reload không đủ để nạp trình chọn file, phát video hoặc mở file.
 
+Plugin vị trí cũng cần dừng/chạy lại app. Với iOS dùng Swift Package Manager, chạy `BYPASS_PERMISSION_LOCATION_ALWAYS=1 flutter run` hoặc thêm cùng biến này khi `flutter build ios` để bỏ nhánh xin quyền vị trí Always khỏi plugin; app chỉ khai báo quyền vị trí khi đang sử dụng.
+
 ## Giao diện và ảnh đại diện thư mục
 
 Giao diện dùng Roboto đóng gói offline, nền trắng và thông tin phụ màu xám. Nội dung chính 16–17px, tiêu đề nội dung 18px, thông tin phụ 13px. Khoảng cách chữ, dòng và nhóm được thu gọn để bố cục liền mạch hơn.
 
 Bottom bar nổi bo tròn trên nền đen, cao 60px, icon 30px. Tab chọn có nền trắng cao 52px, chiều rộng thu còn 2/3 phần focus cũ và hiện tên cạnh icon; hai tab còn lại chỉ hiện icon. Hiệu ứng chuyển tab nhẹ, không có splash/highlight mặc định.
 
-Mỗi thư mục có ảnh đại diện: ưu tiên ảnh do người dùng chọn, sau đó ảnh đầu tiên trong thư mục, cuối cùng là ảnh mẫu đóng gói trong app. Nhấn nút camera trên thumbnail, hoặc icon **Đổi ảnh đại diện** khi đang ở trong thư mục, rồi chọn **Chọn ảnh từ máy**. Ảnh được sao chép vào `vault/covers/` và đường dẫn tương đối được lưu trong metadata thư mục, nên không phụ thuộc file tạm của trình chọn ảnh. Chọn **Dùng ảnh mặc định** để đặt lại. Ảnh cũng cập nhật ở màn Home.
+Ảnh mặc định là thư mục xám bo tròn, thân dày và có chiều sâu nhẹ (mẫu 3 đã chọn), vẽ bằng Flutter để rõ nét ở mọi kích thước. Thêm ảnh vào nội dung không tự thay ảnh đại diện. Nhấn giữ thư mục rồi chọn **Đổi ảnh đại diện**, hoặc trong thư mục nhấn **+ → Đổi ảnh đại diện**, rồi chọn **Chọn ảnh từ máy** để dùng ảnh riêng. Ảnh được sao chép vào `vault/covers/` và đường dẫn tương đối được lưu trong SQLite, nên không phụ thuộc file tạm của trình chọn ảnh. Chọn **Dùng ảnh mặc định** để trở lại hình thư mục xám. Giao diện này dùng chung ở Lưu trữ và Home; ảnh đại diện đã tự chọn được giữ nguyên.
 
 Font: [Google Fonts — Roboto](https://github.com/googlefonts/roboto-2), giấy phép tại `assets/fonts/roboto/LICENSE.txt`.
 
@@ -78,7 +86,7 @@ Font: [Google Fonts — Roboto](https://github.com/googlefonts/roboto-2), giấy
 
 Sáu thư mục mẫu: Cá nhân, Công việc, Ý tưởng, Tài liệu, Hình ảnh, Video. Mỗi thư mục có văn bản thường, editor có định dạng, ảnh JPEG, file PDF và video MP4. Media được đóng gói trong `assets/demo/` và dùng được offline; nguồn tại `assets/demo/SOURCES.txt`.
 
-Các nút thêm nhanh **Text**, **Editor**, **Ảnh**, **File**, **Video**, nút tạo thư mục và menu dấu **+** vẫn có sẵn. Nhấn đúp để mở thư mục. Dữ liệu mẫu được bổ sung một lần cho cả kho cũ; nội dung đã lưu không bị ghi đè.
+Các nút thêm nhanh **Text**, **Editor**, **Ảnh**, **File**, **Video**, nút tạo thư mục và menu dấu **+** có sẵn. Nhấn đúp để mở thư mục. App không tự thêm dữ liệu mẫu cho người dùng mới; dữ liệu đã có được giữ nguyên khi chuyển sang SQLite. Hàm `load(seedDemo: true)` chỉ dùng khi cần tạo dữ liệu demo trong test/preview.
 
 ## Thời hạn phiên xác thực
 

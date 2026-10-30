@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 
@@ -6,6 +7,7 @@ import '../../shared/app_theme.dart';
 import '../../shared/ui.dart';
 import 'vault_models.dart';
 import 'vault_repository.dart';
+import 'selection_badge.dart';
 
 class VaultItemCard extends StatelessWidget {
   const VaultItemCard({
@@ -13,22 +15,81 @@ class VaultItemCard extends StatelessWidget {
     required this.item,
     required this.repository,
     required this.onOpen,
+    this.onMore,
+    this.selectionMode = false,
+    this.selected = false,
   });
   final VaultItem item;
   final VaultRepository repository;
   final VoidCallback onOpen;
+  final VoidCallback? onMore;
+  final bool selectionMode;
+  final bool selected;
+
+  Future<void> _copyText(BuildContext context) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: item.text));
+      if (context.mounted) {
+        showMessage(context, 'Đã sao chép nội dung.');
+      }
+    } catch (_) {
+      if (context.mounted) {
+        showMessage(context, 'Chưa sao chép được. Hãy thử lại.');
+      }
+    }
+  }
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: Colors.white,
-    clipBehavior: Clip.antiAlias,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(14),
-      side: const BorderSide(color: Color(0xFFE3E3E3)),
-    ),
-    child: InkWell(
-      onTap: onOpen,
-      child: item.isNote ? _note(context) : _attachment(context),
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    checked: selectionMode ? selected : null,
+    selected: selected,
+    child: Material(
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: selected ? AppTheme.ink : const Color(0xFFE3E3E3),
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Stack(
+        children: [
+          InkWell(
+            onTap: onOpen,
+            onLongPress: onMore,
+            child: IgnorePointer(
+              ignoring: selectionMode,
+              child: item.isNote ? _note(context) : _attachment(context),
+            ),
+          ),
+          if (selectionMode)
+            Positioned(
+              right: 6,
+              top: 6,
+              child: SelectionBadge(selected: selected),
+            )
+          else if (onMore != null)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                key: ValueKey('item-actions-${item.id}'),
+                tooltip: 'Tùy chọn ${item.name}',
+                onPressed: onMore,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.ink,
+                  minimumSize: const Size(32, 32),
+                  padding: const EdgeInsets.all(6),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.more_horiz, size: 20),
+              ),
+            ),
+        ],
+      ),
     ),
   );
 
@@ -61,6 +122,7 @@ class VaultItemCard extends StatelessWidget {
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
+                  if (onMore != null) const SizedBox(width: 28),
                 ],
               ),
               const SizedBox(height: 8),
@@ -78,7 +140,7 @@ class VaultItemCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: style,
               ),
-              if (truncated)
+              if (truncated && !selectionMode)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: InkWell(
@@ -108,7 +170,22 @@ class VaultItemCard extends StatelessWidget {
                       style: theme.textTheme.bodySmall,
                     ),
                   ),
-                  const Icon(Icons.north_east, size: 16, color: AppTheme.muted),
+                  if (selectionMode)
+                    const SizedBox(width: 32, height: 32)
+                  else
+                    IconButton(
+                      key: ValueKey('copy-text-${item.id}'),
+                      tooltip: 'Sao chép nội dung',
+                      onPressed: item.text.isEmpty
+                          ? null
+                          : () => _copyText(context),
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(32, 32),
+                        padding: const EdgeInsets.all(6),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      icon: const Icon(Icons.content_copy_rounded, size: 18),
+                    ),
                 ],
               ),
             ],

@@ -92,8 +92,16 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
       FocusManager.instance.primaryFocus?.unfocus();
       setState(() => _obscured = true);
       _dismissRootOverlays();
-      // Native authentication dialogs can also background the app.
-      if (_status == _AuthStatus.authenticated) _session.onBackground();
+      final mobile =
+          !kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS);
+      // Mobile `hidden` is a transitional state. Revoke the session when
+      // actually paused, rather than for temporary view/focus transitions.
+      if (state == AppLifecycleState.paused || !mobile) {
+        // Native authentication dialogs can also background the app.
+        if (_status == _AuthStatus.authenticated) _session.onBackground();
+      }
     } else if (state == AppLifecycleState.resumed) {
       _session.validate();
       setState(() => _obscured = false);
@@ -196,7 +204,10 @@ class _AuthGateState extends State<AuthGate> with WidgetsBindingObserver {
               ),
             ),
           ),
-        if (!unlocked) Positioned.fill(child: _buildLockScreen(context)),
+        if (_status != _AuthStatus.authenticated)
+          Positioned.fill(child: _buildLockScreen(context))
+        else if (_obscured)
+          const Positioned.fill(child: ColoredBox(color: Colors.white)),
       ],
     );
   }

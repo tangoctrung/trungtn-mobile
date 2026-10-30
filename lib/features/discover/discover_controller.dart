@@ -2,17 +2,26 @@ import 'package:flutter/foundation.dart';
 
 import 'discover_models.dart';
 import 'discover_service.dart';
+import 'weather_location.dart';
 
 class DiscoverController extends ChangeNotifier {
-  DiscoverController({DiscoverService? service})
-    : _service = service ?? DiscoverService();
+  DiscoverController({
+    DiscoverService? service,
+    WeatherLocationProvider? locationProvider,
+  }) : _service = service ?? DiscoverService(),
+       _location = locationProvider ?? DeviceWeatherLocation();
   final DiscoverService _service;
+  final WeatherLocationProvider _location;
   final weather = FeedResource<WeatherInfo>();
   final gold = FeedResource<PriceBoard>();
   final fuel = FeedResource<PriceBoard>();
   final domestic = FeedResource<List<NewsPost>>();
   final world = FeedResource<List<NewsPost>>();
-  WeatherCity city = WeatherCity.choices.first;
+  WeatherCity? city;
+  bool usingDeviceLocation = true;
+  bool locating = false;
+  WeatherLocationIssue? locationIssue;
+  bool _requestedLocationPermission = false;
   bool _disposed = false;
   bool _refreshing = false;
 
@@ -59,7 +68,7 @@ class DiscoverController extends ChangeNotifier {
     _refreshing = true;
     try {
       await Future.wait([
-        _load(weather, () => _service.weather(city)),
+        refreshWeather(),
         _load(gold, _service.gold),
         _load(fuel, _service.fuel),
         _load(domestic, () => _service.news(NewsCategory.domestic)),
@@ -71,10 +80,80 @@ class DiscoverController extends ChangeNotifier {
   }
 
   Future<void> changeCity(WeatherCity selected) async {
+    usingDeviceLocation = false;
     city = selected;
     // Do not show the previous city's values under the new city's label.
     weather.data = null;
-    await _load(weather, () => _service.weather(selected));
+    await refreshWeather();
+  }
+
+  Future<void> useCurrentLocation() async {
+    if (usingDeviceLocation && weather.loading) return;
+    if (!usingDeviceLocation) weather.data = null;
+    usingDeviceLocation = true;
+    city = null;
+    await refreshWeather(requestPermission: true);
+  }
+
+  Future<void> refreshWeather({bool requestPermission = false}) async {
+    final request = ++weather.request;
+    final deviceLocation = usingDeviceLocation;
+    weather.loading = true;
+    weather.error = null;
+    locationIssue = null;
+    locating = deviceLocation;
+    _changed();
+    try {
+      late final WeatherCity target;
+      if (deviceLocation) {
+        final askPermission =
+            requestPermission || !_requestedLocationPermission;
+        _requestedLocationPermission = true;
+        target = await _location.currentLocation(
+          requestPermission: askPermission,
+        );
+        if (_disposed || request != weather.request) return;
+        city = target;
+        locating = false;
+        _changed();
+      } else {
+        target = city!;
+      }
+      final result = await _service.weather(target);
+      if (_disposed || request != weather.request) return;
+      weather.data = result;
+      weather.fetchedAt = DateTime.now();
+    } catch (error) {
+      if (_disposed || request != weather.request) return;
+      if (error is WeatherLocationFailure) {
+        locationIssue = error.issue;
+        weather.error = error.message;
+        if (weather.data != null) {
+          weather.error =
+              '${weather.error} Đang hiển thị dữ liệu đã tải trước đó.';
+        }
+      } else {
+        weather.error = weather.data == null
+            ? 'Chưa tải được thời tiết. Hãy thử lại.'
+            : 'Chưa cập nhật được thời tiết. Đang hiển thị dữ liệu đã tải trước đó.';
+      }
+    } finally {
+      if (!_disposed && request == weather.request) {
+        locating = false;
+        weather.loading = false;
+        _changed();
+      }
+    }
+  }
+
+  Future<bool> openWeatherLocationSettings() async {
+    try {
+      return await _location.openSettings(
+        locationServices: locationIssue == WeatherLocationIssue.serviceDisabled,
+      );
+    } catch (_) {
+      return false;
+    }
   }
 
   @override

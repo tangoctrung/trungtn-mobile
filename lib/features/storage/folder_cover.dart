@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/ui.dart';
+import 'default_folder_cover.dart';
 import 'vault_models.dart';
 import 'vault_repository.dart';
 
@@ -83,15 +84,7 @@ class FolderCoverImage extends StatelessWidget {
     } catch (_) {
       /* Use the default cover. */
     }
-    Widget fallback() => Image.asset(
-      'assets/demo/owl.jpg',
-      fit: BoxFit.cover,
-      alignment: Alignment.topCenter,
-      errorBuilder: (_, _, _) => const ColoredBox(
-        color: Color(0xFFE5E5E5),
-        child: Center(child: Icon(Icons.folder_outlined, size: 32)),
-      ),
-    );
+    Widget fallback() => const DefaultFolderCover();
     return image == null
         ? fallback()
         : Image.file(

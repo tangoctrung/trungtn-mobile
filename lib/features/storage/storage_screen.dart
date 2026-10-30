@@ -11,6 +11,9 @@ import 'note_editor_screen.dart';
 import 'vault_models.dart';
 import 'vault_item_card.dart';
 import 'vault_repository.dart';
+import 'vault_actions.dart';
+import 'storage_usage_card.dart';
+import 'selection_badge.dart';
 
 class StorageScreen extends StatefulWidget {
   const StorageScreen({
@@ -29,24 +32,68 @@ class StorageScreenState extends State<StorageScreen> {
   String? _folderId;
   String? _selectedId;
   bool _importing = false;
+  bool _selecting = false;
+  bool _confirmingDelete = false;
+  final _selectedFolders = <String>{};
+  final _selectedItems = <String>{};
+  int get _selectionCount => _selectedFolders.length + _selectedItems.length;
+
+  void _clearSelection() {
+    _selecting = false;
+    _selectedFolders.clear();
+    _selectedItems.clear();
+    _selectedId = null;
+  }
+
+  void _startSelection({String? folderId, String? itemId}) => setState(() {
+    _clearSelection();
+    _selecting = true;
+    if (folderId != null) _selectedFolders.add(folderId);
+    if (itemId != null) _selectedItems.add(itemId);
+  });
+
+  void _toggle(Set<String> ids, String id) => setState(() {
+    if (!ids.add(id)) ids.remove(id);
+  });
+
+  Future<void> _deleteSelection() async {
+    if (_confirmingDelete || _selectionCount == 0) return;
+    _confirmingDelete = true;
+    try {
+      final deleted = await confirmBulkDelete(
+        context,
+        widget.repository,
+        folderIds: _selectedFolders,
+        itemIds: _selectedItems,
+      );
+      if (mounted && deleted) {
+        setState(_clearSelection);
+        showMessage(context, 'Đã xóa các mục đã chọn.');
+      }
+    } catch (_) {
+      if (mounted) {
+        showMessage(
+          context,
+          'Nội dung đã thay đổi. Hãy chọn lại các mục cần xóa.',
+        );
+      }
+    } finally {
+      _confirmingDelete = false;
+    }
+  }
 
   void openFolder(VaultFolder folder) => setState(() {
     _folderId = folder.id;
-    _selectedId = null;
+    _clearSelection();
   });
 
   void _back() => setState(() {
     _folderId = widget.repository.folder(_folderId!).parentId;
-    _selectedId = null;
+    _clearSelection();
   });
 
   Future<void> _createFolder() async {
-    await showDialog<void>(
-      context: context,
-      useRootNavigator: false,
-      builder: (_) =>
-          _FolderDialog(repository: widget.repository, parentId: _folderId),
-    );
+    await showFolderEditor(context, widget.repository, parentId: _folderId);
   }
 
   Future<void> _addContent() async {
@@ -68,6 +115,11 @@ class StorageScreenState extends State<StorageScreen> {
                 ),
                 const SizedBox(height: 12),
                 for (final option in [
+                  (
+                    'cover',
+                    Icons.add_photo_alternate_outlined,
+                    'Đổi ảnh đại diện',
+                  ),
                   ('text', Icons.notes_rounded, 'Văn bản thường'),
                   ('richText', Icons.edit_note_rounded, 'Văn bản có định dạng'),
                   ('image', Icons.add_photo_alternate_outlined, 'Hình ảnh'),
@@ -91,6 +143,14 @@ class StorageScreenState extends State<StorageScreen> {
 
   Future<void> _performAdd(String action) async {
     if (_importing || _folderId == null) return;
+    if (action == 'cover') {
+      await chooseFolderCover(
+        context,
+        widget.repository,
+        widget.repository.folder(_folderId!),
+      );
+      return;
+    }
     if (action == 'text' || action == 'richText') {
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
@@ -151,6 +211,65 @@ class StorageScreenState extends State<StorageScreen> {
     }
   }
 
+  Widget _selectionPanel(
+    bool allSelected,
+    Set<String> folderIds,
+    Set<String> itemIds,
+  ) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+    child: Column(
+      children: [
+        Row(
+          children: [
+            IconButton(
+              key: const Key('cancel-selection'),
+              tooltip: 'Thoát chọn',
+              onPressed: () => setState(_clearSelection),
+              icon: const Icon(Icons.close_rounded),
+            ),
+            Expanded(
+              child: Text(
+                'Đã chọn $_selectionCount',
+                key: const Key('selection-count'),
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(
+          width: double.infinity,
+          child: Wrap(
+            key: const Key('storage-selection-toolbar'),
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              TextButton(
+                key: const Key('select-all'),
+                onPressed: () => setState(() {
+                  _selectedFolders.clear();
+                  _selectedItems.clear();
+                  if (!allSelected) {
+                    _selectedFolders.addAll(folderIds);
+                    _selectedItems.addAll(itemIds);
+                  }
+                }),
+                child: Text(allSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'),
+              ),
+              FilledButton.icon(
+                key: const Key('delete-selected'),
+                onPressed: _selectionCount == 0 ? null : _deleteSelection,
+                icon: const Icon(Icons.delete_outline),
+                label: Text('Xóa ($_selectionCount)'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: widget.repository,
@@ -172,234 +291,305 @@ class StorageScreenState extends State<StorageScreen> {
           ),
         );
       }
+      if (_folderId != null &&
+          !repository.folders.any((f) => f.id == _folderId)) {
+        _folderId = null;
+        _clearSelection();
+      }
       final folders = repository.foldersIn(_folderId);
       final items = _folderId == null
-          ? repository.recentItems.take(3).toList()
+          ? <VaultItem>[]
           : repository.itemsIn(_folderId!);
       final folder = _folderId == null ? null : repository.folder(_folderId!);
+      final visibleFolderIds = folders.map((f) => f.id).toSet();
+      final visibleItemIds = items.map((i) => i.id).toSet();
+      _selectedFolders.retainAll(visibleFolderIds);
+      _selectedItems.retainAll(visibleItemIds);
+      final allSelected =
+          folders.length + items.length > 0 &&
+          _selectedFolders.containsAll(visibleFolderIds) &&
+          _selectedItems.containsAll(visibleItemIds);
       return PopScope(
-        canPop: !widget.isActive || _folderId == null,
+        canPop: !widget.isActive || (!_selecting && _folderId == null),
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop && widget.isActive && _folderId != null) _back();
+          if (!didPop && widget.isActive) {
+            if (_selecting) {
+              setState(_clearSelection);
+            } else if (_folderId != null) {
+              _back();
+            }
+          }
         },
-        child: ListView(
-          key: const PageStorageKey('storage-list'),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: Column(
           children: [
-            Row(
-              children: [
-                if (folder != null)
-                  IconButton(
-                    tooltip: 'Thư mục cha',
-                    onPressed: _back,
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        folder?.name ?? 'Kho của bạn',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontSize: 24,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      Text(
-                        folder == null
-                            ? '${repository.folders.length} thư mục · ${repository.items.length} nội dung'
-                            : '${folders.length} thư mục · ${items.length} nội dung',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (folder != null)
-                  IconButton(
-                    key: const Key('change-folder-cover'),
-                    tooltip: 'Đổi ảnh đại diện',
-                    onPressed: _importing
-                        ? null
-                        : () => chooseFolderCover(context, repository, folder),
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
-                  ),
-                IconButton(
-                  key: const Key('add-folder'),
-                  tooltip: 'Thêm thư mục',
-                  onPressed: _importing ? null : _createFolder,
-                  icon: const Icon(Icons.create_new_folder_outlined),
-                ),
-                if (folder != null)
-                  IconButton(
-                    key: const Key('add-content'),
-                    tooltip: 'Thêm nội dung',
-                    onPressed: _importing ? null : _addContent,
-                    icon: const Icon(Icons.add_circle_outline, size: 24),
-                  ),
-              ],
-            ),
-            if (folder != null) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
+            if (_selecting)
+              _selectionPanel(allSelected, visibleFolderIds, visibleItemIds),
+            Expanded(
+              child: ListView(
+                key: const PageStorageKey('storage-list'),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                 children: [
-                  for (final action in [
-                    (
-                      'text',
-                      Icons.note_add_outlined,
-                      'Text',
-                      'Thêm văn bản thường',
-                    ),
-                    (
-                      'richText',
-                      Icons.post_add_rounded,
-                      'Editor',
-                      'Thêm text editor',
-                    ),
-                    (
-                      'image',
-                      Icons.add_photo_alternate_outlined,
-                      'Ảnh',
-                      'Thêm ảnh',
-                    ),
-                    ('file', Icons.upload_file_outlined, 'File', 'Thêm file'),
-                    ('video', Icons.video_call_outlined, 'Video', 'Thêm video'),
-                  ])
-                    Tooltip(
-                      message: action.$4,
-                      child: ActionChip(
-                        key: ValueKey('quick-add-${action.$1}'),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        avatar: Icon(action.$2, size: 20),
-                        label: Text(action.$3),
-                        labelStyle: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurface,
+                  if (!_selecting)
+                    Row(
+                      children: [
+                        if (folder != null)
+                          IconButton(
+                            tooltip: 'Thư mục cha',
+                            onPressed: _back,
+                            icon: const Icon(Icons.arrow_back_rounded),
+                          ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                folder?.name ?? 'Kho của bạn',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      fontSize: 24,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              if (folder != null)
+                                Text(
+                                  '${folders.length} thư mục · ${items.length} nội dung',
+                                  style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
+                        IconButton(
+                          key: const Key('start-selection'),
+                          tooltip: 'Chọn nhiều',
+                          onPressed:
+                              _importing || (folders.isEmpty && items.isEmpty)
+                              ? null
+                              : () => _startSelection(),
+                          icon: const Icon(Icons.checklist_rounded),
+                        ),
+                        IconButton(
+                          key: const Key('add-folder'),
+                          tooltip: 'Thêm thư mục',
+                          onPressed: _importing ? null : _createFolder,
+                          icon: const Icon(Icons.create_new_folder_outlined),
+                        ),
+                        if (folder != null)
+                          IconButton(
+                            key: const Key('add-content'),
+                            tooltip: 'Thêm nội dung',
+                            onPressed: _importing ? null : _addContent,
+                            icon: const Icon(
+                              Icons.add_circle_outline,
+                              size: 24,
+                            ),
+                          ),
+                      ],
+                    ),
+                  if (folder == null && !_selecting) ...[
+                    const SizedBox(height: 16),
+                    StorageUsageCard(repository: repository),
+                  ],
+                  if (folder != null && !_selecting) ...[
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        for (final action in [
+                          (
+                            'text',
+                            Icons.note_add_outlined,
+                            'Text',
+                            'Thêm văn bản thường',
+                          ),
+                          (
+                            'richText',
+                            Icons.post_add_rounded,
+                            'Editor',
+                            'Thêm text editor',
+                          ),
+                          (
+                            'image',
+                            Icons.add_photo_alternate_outlined,
+                            'Ảnh',
+                            'Thêm ảnh',
+                          ),
+                          (
+                            'file',
+                            Icons.upload_file_outlined,
+                            'File',
+                            'Thêm file',
+                          ),
+                          (
+                            'video',
+                            Icons.video_call_outlined,
+                            'Video',
+                            'Thêm video',
+                          ),
+                        ])
+                          Tooltip(
+                            message: action.$4,
+                            child: ActionChip(
+                              key: ValueKey('quick-add-${action.$1}'),
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              avatar: Icon(action.$2, size: 20),
+                              label: Text(action.$3),
+                              labelStyle: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
+                              onPressed: _importing
+                                  ? null
+                                  : () => _performAdd(action.$1),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (_importing) ...[
+                    const SizedBox(height: 12),
+                    const LinearProgressIndicator(),
+                    const SizedBox(height: 8),
+                    const Text('Đang nhập tệp…'),
+                  ],
+                  if (folders.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _selecting
+                          ? 'Chạm vào thư mục hoặc nội dung để chọn'
+                          : 'Nhấn đúp để mở thư mục',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = (constraints.maxWidth / 170)
+                            .floor()
+                            .clamp(2, 5);
+                        final tileWidth =
+                            (constraints.maxWidth - (columns - 1) * 10) /
+                            columns;
+                        return GridView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: columns,
+                                mainAxisExtent:
+                                    tileWidth * 9 / 16 +
+                                    MediaQuery.textScalerOf(context).scale(52),
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 8,
+                              ),
+                          itemCount: folders.length,
+                          itemBuilder: (context, index) {
+                            final entry = folders[index];
+                            final count =
+                                repository.itemsIn(entry.id).length +
+                                repository.foldersIn(entry.id).length;
+                            return FolderTile(
+                              folder: entry,
+                              count: count,
+                              selectionMode: _selecting,
+                              selected: _selecting
+                                  ? _selectedFolders.contains(entry.id)
+                                  : entry.id == _selectedId,
+                              repository: repository,
+                              onSelect: _selecting
+                                  ? () => _toggle(_selectedFolders, entry.id)
+                                  : () =>
+                                        setState(() => _selectedId = entry.id),
+                              onOpen: _selecting
+                                  ? () => _toggle(_selectedFolders, entry.id)
+                                  : () => openFolder(entry),
+                              onMore: _selecting
+                                  ? () => _toggle(_selectedFolders, entry.id)
+                                  : () => showFolderActions(
+                                      context,
+                                      repository,
+                                      entry,
+                                      onSelect: () =>
+                                          _startSelection(folderId: entry.id),
+                                    ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                  if (items.isNotEmpty) ...[
+                    const SectionTitle('Nội dung'),
+                    GridView.builder(
+                      key: const Key('folder-content-grid'),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: items.length,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisExtent: MediaQuery.textScalerOf(context)
+                            .scale(240),
+                        crossAxisSpacing: 10,
+                        mainAxisSpacing: 10,
+                      ),
+                      itemBuilder: (context, index) => VaultItemCard(
+                        key: ValueKey('content-card-${items[index].id}'),
+                        item: items[index],
+                        repository: repository,
+                        selectionMode: _selecting,
+                        selected: _selectedItems.contains(items[index].id),
+                        onOpen: _selecting
+                            ? () => _toggle(_selectedItems, items[index].id)
+                            : () => openVaultItem(
+                                context,
+                                repository,
+                                items[index],
+                              ),
+                        onMore: _selecting
+                            ? () => _toggle(_selectedItems, items[index].id)
+                            : () => showItemActions(
+                                context,
+                                repository,
+                                items[index],
+                                onSelect: () =>
+                                    _startSelection(itemId: items[index].id),
+                              ),
+                      ),
+                    ),
+                  ],
+                  if (folders.isEmpty && items.isEmpty && !_selecting)
+                    EmptyState(
+                      icon: folder == null
+                          ? Icons.folder_copy_outlined
+                          : Icons.folder_open_rounded,
+                      title: folder == null
+                          ? 'Bắt đầu với một thư mục'
+                          : 'Thư mục đang trống',
+                      message: folder == null
+                          ? 'Tạo nơi lưu ghi chú, ảnh, video và những tệp quan trọng của bạn.'
+                          : 'Thêm văn bản, hình ảnh, video hoặc tệp từ thiết bị.',
+                      action: TextButton.icon(
                         onPressed: _importing
                             ? null
-                            : () => _performAdd(action.$1),
+                            : folder == null
+                            ? _createFolder
+                            : _addContent,
+                        icon: const Icon(Icons.add_rounded),
+                        label: Text(
+                          folder == null
+                              ? 'Tạo thư mục đầu tiên'
+                              : 'Thêm nội dung',
+                        ),
                       ),
                     ),
                 ],
               ),
-            ],
-            if (_importing) ...[
-              const SizedBox(height: 12),
-              const LinearProgressIndicator(),
-              const SizedBox(height: 8),
-              const Text('Đang nhập tệp…'),
-            ],
-            if (folders.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                'Nhấn đúp để mở thư mục',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  final columns = (constraints.maxWidth / 170).floor().clamp(
-                    2,
-                    5,
-                  );
-                  final tileWidth =
-                      (constraints.maxWidth - (columns - 1) * 10) / columns;
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns,
-                      mainAxisExtent:
-                          tileWidth * 9 / 16 +
-                          MediaQuery.textScalerOf(context).scale(52),
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: folders.length,
-                    itemBuilder: (context, index) {
-                      final entry = folders[index];
-                      final count =
-                          repository.itemsIn(entry.id).length +
-                          repository.foldersIn(entry.id).length;
-                      return FolderTile(
-                        folder: entry,
-                        count: count,
-                        selected: entry.id == _selectedId,
-                        repository: repository,
-                        onChangeCover: () =>
-                            chooseFolderCover(context, repository, entry),
-                        onSelect: () => setState(() => _selectedId = entry.id),
-                        onOpen: () => openFolder(entry),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
-            if (items.isNotEmpty) ...[
-              SectionTitle(folder == null ? 'Gần đây' : 'Nội dung'),
-              if (folder == null)
-                SurfaceCard(
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      for (final item in items)
-                        VaultItemTile(
-                          item: item,
-                          repository: repository,
-                          onTap: () => openVaultItem(context, repository, item),
-                        ),
-                    ],
-                  ),
-                )
-              else
-                GridView.builder(
-                  key: const Key('folder-content-grid'),
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: items.length,
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisExtent: MediaQuery.textScalerOf(context).scale(240),
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
-                  ),
-                  itemBuilder: (context, index) => VaultItemCard(
-                    key: ValueKey('content-card-${items[index].id}'),
-                    item: items[index],
-                    repository: repository,
-                    onOpen: () =>
-                        openVaultItem(context, repository, items[index]),
-                  ),
-                ),
-            ],
-            if (folders.isEmpty && items.isEmpty)
-              EmptyState(
-                icon: folder == null
-                    ? Icons.folder_copy_outlined
-                    : Icons.folder_open_rounded,
-                title: folder == null
-                    ? 'Bắt đầu với một thư mục'
-                    : 'Thư mục đang trống',
-                message: folder == null
-                    ? 'Tạo nơi lưu ghi chú, ảnh, video và những tệp quan trọng của bạn.'
-                    : 'Thêm văn bản, hình ảnh, video hoặc tệp từ thiết bị.',
-                action: TextButton.icon(
-                  onPressed: _importing
-                      ? null
-                      : folder == null
-                      ? _createFolder
-                      : _addContent,
-                  icon: const Icon(Icons.add_rounded),
-                  label: Text(
-                    folder == null ? 'Tạo thư mục đầu tiên' : 'Thêm nội dung',
-                  ),
-                ),
-              ),
+            ),
           ],
         ),
       );
@@ -415,135 +605,118 @@ class FolderTile extends StatelessWidget {
     required this.onSelect,
     required this.onOpen,
     this.selected = false,
+    this.selectionMode = false,
     this.repository,
-    this.onChangeCover,
+    this.onMore,
   });
   final VaultFolder folder;
   final int count;
   final bool selected;
+  final bool selectionMode;
   final VoidCallback onSelect;
   final VoidCallback onOpen;
   final VaultRepository? repository;
-  final VoidCallback? onChangeCover;
+  final VoidCallback? onMore;
 
   @override
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
+    checked: selectionMode ? selected : null,
     label: 'Thư mục ${folder.name}, $count nội dung',
     onTap: onOpen,
-    child: Stack(
-      children: [
-        Material(
-          color: Colors.white,
-          child: InkWell(
-            key: ValueKey('folder-${folder.id}'),
-            borderRadius: BorderRadius.circular(8),
-            onTap: onSelect,
-            onDoubleTap: onOpen,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: FolderCoverImage(
-                            folder: folder,
-                            repository: repository,
-                          ),
-                        ),
-                        Positioned(
-                          right: 8,
-                          bottom: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.ink,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(
-                                  Icons.playlist_play,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                                const SizedBox(width: 3),
-                                Text(
-                                  '$count',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        if (selected)
-                          const Positioned(
-                            left: 6,
-                            top: 6,
-                            child: Icon(
-                              Icons.check_circle,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
-                      ],
+    child: Material(
+      color: Colors.white,
+      child: InkWell(
+        key: ValueKey('folder-${folder.id}'),
+        borderRadius: BorderRadius.circular(8),
+        onTap: onSelect,
+        onDoubleTap: selectionMode ? null : onOpen,
+        onLongPress: onMore,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 9,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: FolderCoverImage(
+                        folder: folder,
+                        repository: repository,
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      right: 8,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.ink,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.playlist_play,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (selectionMode)
+                      Positioned(
+                        right: 6,
+                        top: 6,
+                        child: SelectionBadge(selected: selected),
+                      )
+                    else if (selected)
+                      const Positioned(
+                        left: 6,
+                        bottom: 6,
+                        child: Icon(
+                          Icons.check_circle,
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  folder.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '$count nội dung',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(height: 6),
+            Text(
+              folder.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              '$count nội dung',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ),
-        // Keep the cover control outside the folder's double-tap recognizer.
-        if (onChangeCover != null)
-          Positioned(
-            top: 4,
-            right: 4,
-            child: IconButton(
-              key: ValueKey('folder-cover-${folder.id}'),
-              tooltip: 'Đổi ảnh đại diện ${folder.name}',
-              onPressed: onChangeCover,
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.black54,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(32, 32),
-                padding: const EdgeInsets.all(6),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              icon: const Icon(
-                Icons.photo_camera_outlined,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-          ),
-      ],
+      ),
     ),
   );
 }
@@ -604,71 +777,5 @@ class VaultItemTile extends StatelessWidget {
         color: AppTheme.muted,
       ),
     ),
-  );
-}
-
-class _FolderDialog extends StatefulWidget {
-  const _FolderDialog({required this.repository, this.parentId});
-  final VaultRepository repository;
-  final String? parentId;
-  @override
-  State<_FolderDialog> createState() => _FolderDialogState();
-}
-
-class _FolderDialogState extends State<_FolderDialog> {
-  final _controller = TextEditingController();
-  String? _error;
-  bool _saving = false;
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _create() async {
-    if (_saving) return;
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      await widget.repository.createFolder(
-        _controller.text,
-        parentId: widget.parentId,
-      );
-      if (mounted) Navigator.pop(context);
-    } on ArgumentError catch (error) {
-      if (mounted) setState(() => _error = error.message.toString());
-    } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Chưa tạo được thư mục. Hãy thử lại.');
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Thêm thư mục'),
-    content: TextField(
-      key: const Key('folder-name'),
-      controller: _controller,
-      autofocus: true,
-      maxLength: 80,
-      textCapitalization: TextCapitalization.sentences,
-      onSubmitted: (_) => _create(),
-      decoration: InputDecoration(labelText: 'Tên thư mục', errorText: _error),
-    ),
-    actions: [
-      TextButton(
-        onPressed: _saving ? null : () => Navigator.pop(context),
-        child: const Text('Hủy'),
-      ),
-      FilledButton(
-        onPressed: _saving ? null : _create,
-        child: Text(_saving ? 'Đang tạo…' : 'Tạo'),
-      ),
-    ],
   );
 }

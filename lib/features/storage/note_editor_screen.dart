@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
 
 import '../../shared/ui.dart';
+import '../../shared/app_theme.dart';
 import 'vault_models.dart';
 import 'vault_repository.dart';
 
@@ -26,9 +30,15 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   late final TextEditingController _title;
   late final TextEditingController _text;
   late final quill.QuillController _editor;
+  late final String _initialTitle;
+  late final String _initialText;
+  late final String _initialDelta;
+  late final StreamSubscription<quill.DocChange> _documentChanges;
+  bool _documentDirty = false;
   bool _dirty = false;
   bool _saving = false;
   bool _allowPop = false;
+  bool _confirmingDiscard = false;
 
   @override
   void initState() {
@@ -38,17 +48,28 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _editor = quill.QuillController.basic();
     final delta = widget.item?.delta;
     if (delta != null) _editor.document = quill.Document.fromJson(delta);
-    _title.addListener(_markDirty);
-    _text.addListener(_markDirty);
-    _editor.addListener(_markDirty);
+    _initialTitle = _title.text;
+    _initialText = _text.text;
+    _initialDelta = jsonEncode(_editor.document.toDelta().toJson());
+    _title.addListener(_updateDirty);
+    _text.addListener(_updateDirty);
+    _documentChanges = _editor.document.changes.listen((_) {
+      _documentDirty =
+          jsonEncode(_editor.document.toDelta().toJson()) != _initialDelta;
+      _updateDirty();
+    });
   }
 
-  void _markDirty() {
-    if (!_dirty && mounted) setState(() => _dirty = true);
+  void _updateDirty() {
+    final dirty =
+        _title.text != _initialTitle ||
+        (widget.richText ? _documentDirty : _text.text != _initialText);
+    if (mounted && dirty != _dirty) setState(() => _dirty = dirty);
   }
 
   @override
   void dispose() {
+    unawaited(_documentChanges.cancel());
     _title.dispose();
     _text.dispose();
     _editor.dispose();
@@ -88,7 +109,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   }
 
   Future<void> _confirmDiscard() async {
-    if (_saving) return;
+    if (_saving || _confirmingDiscard) return;
+    _confirmingDiscard = true;
     final discard = await showDialog<bool>(
       context: context,
       useRootNavigator: false,
@@ -109,6 +131,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         ],
       ),
     );
+    _confirmingDiscard = false;
     if (discard == true && mounted) {
       setState(() => _allowPop = true);
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -154,13 +177,39 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             if (widget.richText) ...[
               quill.QuillSimpleToolbar(
                 controller: _editor,
-                config: const quill.QuillSimpleToolbarConfig(
+                config: quill.QuillSimpleToolbarConfig(
                   multiRowsDisplay: false,
                   showFontFamily: false,
                   showFontSize: false,
                   showSearchButton: false,
                   showInlineCode: false,
                   showCodeBlock: false,
+                  buttonOptions: quill.QuillSimpleToolbarButtonOptions(
+                    base: quill.QuillToolbarBaseButtonOptions(
+                      iconTheme: quill.QuillIconTheme(
+                        iconButtonSelectedData: quill.IconButtonData(
+                          color: Colors.white,
+                          style: IconButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            backgroundColor: AppTheme.ink,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        iconButtonUnselectedData: quill.IconButtonData(
+                          color: AppTheme.ink,
+                          style: IconButton.styleFrom(
+                            foregroundColor: AppTheme.ink,
+                            backgroundColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ),
               const Divider(height: 1),

@@ -1,5 +1,17 @@
 enum VaultItemType { text, richText, image, video, file }
 
+class VaultDeletionPlan {
+  VaultDeletionPlan({
+    required Set<String> folderIds,
+    required Set<String> itemIds,
+  }) : folderIds = Set.unmodifiable(folderIds),
+       itemIds = Set.unmodifiable(itemIds);
+
+  final Set<String> folderIds;
+  final Set<String> itemIds;
+  bool get isEmpty => folderIds.isEmpty && itemIds.isEmpty;
+}
+
 class VaultFolder {
   const VaultFolder({
     required this.id,
@@ -14,6 +26,14 @@ class VaultFolder {
   final String? parentId;
   final DateTime createdAt;
   final String? coverRelativePath;
+
+  VaultFolder withName(String value) => VaultFolder(
+    id: id,
+    name: value,
+    parentId: parentId,
+    createdAt: createdAt,
+    coverRelativePath: coverRelativePath,
+  );
 
   VaultFolder withCover(String? relativePath) => VaultFolder(
     id: id,
@@ -67,6 +87,19 @@ class VaultItem {
 
   bool get isNote =>
       type == VaultItemType.text || type == VaultItemType.richText;
+
+  VaultItem withName(String value) => VaultItem(
+    id: id,
+    folderId: folderId,
+    name: value,
+    type: type,
+    text: text,
+    delta: delta,
+    relativePath: relativePath,
+    size: size,
+    createdAt: createdAt,
+    updatedAt: DateTime.now(),
+  );
 
   factory VaultItem.fromJson(Map<String, dynamic> json) => VaultItem(
     id: json['id'] as String,

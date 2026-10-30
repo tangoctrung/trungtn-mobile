@@ -39,7 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _repository = widget.repository ?? VaultRepository();
     _discover = widget.discover ?? DiscoverController();
-    if (widget.repository == null) unawaited(_repository.load(seedDemo: true));
+    if (widget.repository == null) unawaited(_repository.load());
     if (widget.discover == null) unawaited(_discover.refresh());
   }
 

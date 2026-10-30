@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite/sqflite.dart';
 import 'package:flutter_demo/features/storage/vault_models.dart';
 import 'package:flutter_demo/features/storage/vault_repository.dart';
 
@@ -17,9 +18,17 @@ void main() {
     await repository.load();
   });
   tearDown(() async {
+    await repository.close();
     repository.dispose();
     await directory.delete(recursive: true);
   });
+
+  Future<void> legacyIndex(Object json) async {
+    await repository.close();
+    await File(p.join(directory.path, 'vault', 'vault.db')).delete();
+    await File(p.join(directory.path, 'vault', 'index.json'))
+        .writeAsString(json is String ? json : jsonEncode(json));
+  }
 
   test(
     'Folders, nested folders and plain/rich notes survive a fresh repository',
@@ -49,7 +58,10 @@ void main() {
         ],
       );
       final fresh = VaultRepository(directoryProvider: () async => directory);
-      addTearDown(fresh.dispose);
+      addTearDown(() async {
+        await fresh.close();
+        fresh.dispose();
+      });
       await fresh.load();
       expect(fresh.error, isNull);
       expect(fresh.foldersIn(null).single.name, 'Cá nhân');
@@ -126,8 +138,8 @@ void main() {
   test(
     'Unreadable index is kept intact and cannot be silently overwritten',
     () async {
+      await legacyIndex('{broken');
       final index = File(p.join(directory.path, 'vault', 'index.json'));
-      await index.writeAsString('{broken');
       await repository.load();
       expect(repository.error, isNotNull);
       await expectLater(repository.createFolder('New'), throwsStateError);
@@ -146,10 +158,8 @@ void main() {
       throwsA(isA<FileSystemException>()),
     );
     expect(repository.items, isEmpty);
-    final json = jsonDecode(
-      await File(p.join(directory.path, 'vault', 'index.json')).readAsString(),
-    );
-    expect(json['items'], isEmpty);
+    await repository.load();
+    expect(repository.items, isEmpty);
   });
 
   test('Metadata cannot resolve a file outside the vault', () async {
@@ -190,7 +200,7 @@ void main() {
       );
       expect(await repository.fileFor(sampleFile).exists(), isTrue);
       await repository.load(seedDemo: true);
-      expect(repository.items.map((item) => item.id).toList(), ids);
+      expect(repository.items.map((item) => item.id), unorderedEquals(ids));
       expect(
         repository.items.firstWhere((item) => item.id == note.id).text,
         'Đã sửa',
@@ -246,7 +256,10 @@ void main() {
       await source.delete();
       expect(await storedFile.readAsBytes(), bytes);
       final fresh = VaultRepository(directoryProvider: () async => directory);
-      addTearDown(fresh.dispose);
+      addTearDown(() async {
+        await fresh.close();
+        fresh.dispose();
+      });
       await fresh.load();
       expect(
         fresh.folder(folder.id).coverRelativePath,
@@ -287,6 +300,30 @@ void main() {
     expect(await secondFile.exists(), isFalse);
     expect(repository.itemsIn(folder.id).single.id, note.id);
     expect(repository.itemsIn(folder.id).single.text, 'Giữ lại');
+  });
+
+  test('Default folder cover stays a folder after adding images and resetting a chosen cover', () async {
+    final folder = await repository.createFolder('Ảnh');
+    final image = await repository.importFile(
+      folderId: folder.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Nội dung.jpg',
+    );
+    expect(repository.folderCoverFile(repository.folder(folder.id)), isNull);
+    final custom = await repository.setFolderCover(
+      folderId: folder.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Ảnh đại diện.jpg',
+    );
+    final customFile = repository.folderCoverFile(custom)!;
+    expect(await customFile.exists(), isTrue);
+    await repository.resetFolderCover(folder.id);
+    expect(repository.folderCoverFile(repository.folder(folder.id)), isNull);
+    expect(await customFile.exists(), isFalse);
+    expect(await repository.fileFor(image).exists(), isTrue);
+    await repository.load();
+    expect(repository.folderCoverFile(repository.folder(folder.id)), isNull);
+    expect(repository.items.single.id, image.id);
   });
 
   test(
@@ -331,12 +368,386 @@ void main() {
 
   test('Folders in an older index without cover metadata still load', () async {
     final folder = await repository.createFolder('Cũ');
-    final index = File(p.join(directory.path, 'vault', 'index.json'));
-    final json = jsonDecode(await index.readAsString()) as Map;
+    final json = {
+      'version': 1,
+      'folders': [folder.toJson()],
+      'items': [],
+    };
     (json['folders'] as List).first.remove('coverRelativePath');
-    await index.writeAsString(jsonEncode(json));
+    await legacyIndex(json);
     await repository.load();
     expect(repository.error, isNull);
     expect(repository.folder(folder.id).coverRelativePath, isNull);
   });
+
+  test('SQLite migration preserves notes, covers and files and never imports twice', () async {
+    final parent = await repository.createFolder('Cũ');
+    final child = await repository.createFolder('Con', parentId: parent.id);
+    final note = await repository.saveNote(
+      folderId: child.id,
+      name: 'Tiếng Việt',
+      text: 'Chào 👋',
+      richText: true,
+      delta: [
+        {'insert': 'Chào 👋\n'},
+      ],
+    );
+    final file = await repository.importFile(
+      folderId: child.id,
+      source: File('assets/demo/welcome.pdf'),
+      name: 'Tài liệu.pdf',
+    );
+    await repository.setFolderCover(
+      folderId: parent.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'cover.jpg',
+    );
+    final original = {
+      'version': 1,
+      'demoVersion': 2,
+      'folders': repository.folders.map((f) => f.toJson()).toList(),
+      'items': repository.items.map((i) => i.toJson()).toList(),
+    };
+    await legacyIndex(original);
+    await repository.load();
+    expect(repository.error, isNull);
+    expect(
+      repository.items.firstWhere((i) => i.id == note.id).delta,
+      note.delta,
+    );
+    expect(await repository.fileFor(file).exists(), isTrue);
+    expect(
+      await repository.folderCoverFile(repository.folder(parent.id))!.exists(),
+      isTrue,
+    );
+    final header = await File(p.join(directory.path, 'vault', 'vault.db'))
+        .openRead(0, 16)
+        .expand((bytes) => bytes)
+        .toList();
+    expect(utf8.decode(header), 'SQLite format 3\u0000');
+    // Even an empty library is authoritative after migration, rather than
+    // resurrecting deleted content from the untouched JSON backup.
+    await repository.deleteFolder(parent.id);
+    await repository.load();
+    expect(repository.folders, isEmpty);
+    expect(repository.items, isEmpty);
+    expect(
+      jsonDecode(
+        await File(p.join(directory.path, 'vault', 'index.json'))
+            .readAsString(),
+      ),
+      original,
+    );
+  });
+
+  test(
+    'A failed migration rolls back all rows and can be retried safely',
+    () async {
+      final parent = await repository.createFolder('Parent');
+      final note = await repository.saveNote(
+        folderId: parent.id,
+        name: 'Note',
+        text: 'Keep me',
+        richText: false,
+      );
+      final valid = {
+        'version': 1,
+        'folders': [parent.toJson()],
+        'items': [note.toJson()],
+      };
+      await legacyIndex({
+        ...valid,
+        'items': [
+          {...note.toJson(), 'folderId': 'missing'},
+        ],
+      });
+      await repository.load();
+      expect(repository.error, isNotNull);
+      await expectLater(
+        repository.createFolder('Must not write'),
+        throwsStateError,
+      );
+      await File(p.join(directory.path, 'vault', 'index.json'))
+          .writeAsString(jsonEncode(valid));
+      await repository.load();
+      expect(repository.error, isNull);
+      expect(repository.folders.single.id, parent.id);
+      expect(repository.items.single.text, 'Keep me');
+    },
+  );
+
+  test('Rename is persistent, preserves contents and rejects duplicate sibling names', () async {
+    final first = await repository.createFolder('One');
+    await repository.createFolder('Two');
+    final nested = await repository.createFolder('Nested', parentId: first.id);
+    final note = await repository.saveNote(
+      folderId: nested.id,
+      name: 'Before',
+      text: 'Keep',
+      richText: false,
+    );
+    await expectLater(
+      repository.renameFolder(first.id, ' two '),
+      throwsArgumentError,
+    );
+    await expectLater(
+      repository.renameFolder(first.id, ' '),
+      throwsArgumentError,
+    );
+    await repository.renameFolder(first.id, "Công việc '2026'");
+    await repository.renameItem(note.id, 'After');
+    await repository.load();
+    expect(repository.folder(first.id).name, "Công việc '2026'");
+    expect(repository.folder(nested.id).parentId, first.id);
+    expect(repository.items.single.name, 'After');
+    expect(repository.items.single.text, 'Keep');
+    expect(repository.items.single.createdAt, note.createdAt);
+  });
+
+  test('Deleting a folder removes every descendant and owned file but preserves siblings', () async {
+    final root = await repository.createFolder('Remove');
+    final child = await repository.createFolder('Child', parentId: root.id);
+    final grandchild = await repository.createFolder(
+      'Grandchild',
+      parentId: child.id,
+    );
+    final sibling = await repository.createFolder('Keep');
+    final retained = await repository.saveNote(
+      folderId: sibling.id,
+      name: 'Keep',
+      text: 'Keep',
+      richText: false,
+    );
+    await repository.saveNote(
+      folderId: child.id,
+      name: 'Remove',
+      text: 'Remove',
+      richText: false,
+    );
+    final image = await repository.importFile(
+      folderId: grandchild.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Photo.jpg',
+    );
+    final cover = await repository.setFolderCover(
+      folderId: root.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Cover.jpg',
+    );
+    final coverFile = repository.folderCoverFile(cover)!;
+    await repository.deleteFolder(root.id);
+    expect(await repository.fileFor(image).exists(), isFalse);
+    expect(await coverFile.exists(), isFalse);
+    expect(repository.storageStats.fileBytes, 0);
+    expect(repository.storageStats.coverBytes, 0);
+    await repository.load();
+    expect(repository.folders.single.id, sibling.id);
+    expect(repository.items.single.id, retained.id);
+  });
+
+  test('Replacing an attachment preserves identity, cleans the old copy, and keeps data on failure', () async {
+    final folder = await repository.createFolder('Files');
+    final original = await repository.importFile(
+      folderId: folder.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Old.jpg',
+    );
+    final oldFile = repository.fileFor(original);
+    await expectLater(
+      repository.importFile(
+        folderId: folder.id,
+        source: File(p.join(directory.path, 'missing')),
+        name: 'Missing.jpg',
+        replaceItemId: original.id,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(repository.items.single.relativePath, original.relativePath);
+    expect(await oldFile.exists(), isTrue);
+    final updated = await repository.importFile(
+      folderId: folder.id,
+      source: File('assets/demo/welcome.pdf'),
+      name: 'New.pdf',
+      replaceItemId: original.id,
+    );
+    expect(updated.id, original.id);
+    expect(updated.createdAt, original.createdAt);
+    expect(updated.type, VaultItemType.file);
+    expect(await oldFile.exists(), isFalse);
+    await repository.load();
+    expect(repository.items.single.name, 'New.pdf');
+    expect(
+      await repository.fileFor(repository.items.single).readAsBytes(),
+      await File('assets/demo/welcome.pdf').readAsBytes(),
+    );
+  });
+
+  test('Batch deletion expands descendants, deduplicates selection, and preserves unselected data', () async {
+    final parent = await repository.createFolder('Parent');
+    final child = await repository.createFolder('Child', parentId: parent.id);
+    final another = await repository.createFolder('Another');
+    final keep = await repository.createFolder('Keep');
+    final childNote = await repository.saveNote(
+      folderId: child.id,
+      name: 'Inside',
+      text: 'Inside',
+      richText: false,
+    );
+    await repository.saveNote(
+      folderId: another.id,
+      name: 'Other',
+      text: 'Other',
+      richText: false,
+    );
+    final retained = await repository.saveNote(
+      folderId: keep.id,
+      name: 'Keep',
+      text: 'Keep',
+      richText: false,
+    );
+    final image = await repository.importFile(
+      folderId: keep.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Image.jpg',
+    );
+    final file = await repository.importFile(
+      folderId: keep.id,
+      source: File('assets/demo/welcome.pdf'),
+      name: 'File.pdf',
+    );
+    final cover = await repository.setFolderCover(
+      folderId: child.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'Cover.jpg',
+    );
+    final coverFile = repository.folderCoverFile(cover)!;
+    final plan = repository.planDeletion(
+      folderIds: [parent.id, child.id, another.id],
+      itemIds: [childNote.id, image.id, file.id],
+    );
+    expect(plan.folderIds.length, 3);
+    expect(plan.itemIds.length, 4);
+    await repository.deleteMany(
+      folderIds: [parent.id, child.id, another.id, parent.id],
+      itemIds: [childNote.id, image.id, file.id],
+    );
+    expect(repository.folders.single.id, keep.id);
+    expect(repository.items.single.id, retained.id);
+    expect(await repository.fileFor(image).exists(), isFalse);
+    expect(await repository.fileFor(file).exists(), isFalse);
+    expect(await coverFile.exists(), isFalse);
+    expect(repository.storageStats.fileBytes, 0);
+    expect(repository.storageStats.coverBytes, 0);
+    await repository.load();
+    expect(repository.folders.single.id, keep.id);
+    expect(repository.items.single.id, retained.id);
+  });
+
+  test('A rejected batch rolls back all SQLite rows and retains files for retry', () async {
+    final folder = await repository.createFolder('Files');
+    final first = await repository.importFile(
+      folderId: folder.id,
+      source: File('assets/demo/owl.jpg'),
+      name: 'First.jpg',
+    );
+    final second = await repository.importFile(
+      folderId: folder.id,
+      source: File('assets/demo/welcome.pdf'),
+      name: 'Second.pdf',
+    );
+    await expectLater(
+      repository.deleteMany(itemIds: [first.id, 'stale-id']),
+      throwsStateError,
+    );
+    expect(repository.items.length, 2);
+    final db = await databaseFactory.openDatabase(
+      p.join(directory.path, 'vault', 'vault.db'),
+      options: OpenDatabaseOptions(singleInstance: false),
+    );
+    try {
+      await db.execute(
+        "CREATE TRIGGER reject_batch BEFORE DELETE ON items WHEN OLD.id = '${second.id}' BEGIN SELECT RAISE(ABORT, 'test rejection'); END",
+      );
+      await expectLater(
+        repository.deleteMany(itemIds: [first.id, second.id]),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect((await db.query('items')).length, 2);
+      expect(repository.items.length, 2);
+      expect(await repository.fileFor(first).exists(), isTrue);
+      expect(await repository.fileFor(second).exists(), isTrue);
+      await db.execute('DROP TRIGGER reject_batch');
+      await repository.deleteMany(itemIds: [first.id, second.id]);
+      expect(repository.items, isEmpty);
+      expect(await repository.fileFor(first).exists(), isFalse);
+      expect(await repository.fileFor(second).exists(), isFalse);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test(
+    'Batch deletion keeps shared media until the last reference is removed',
+    () async {
+      await repository.load(seedDemo: true);
+      final images = repository.items
+          .where((i) => i.type == VaultItemType.image)
+          .toList();
+      final shared = repository.fileFor(images.first);
+      final originalBytes = repository.storageStats.fileBytes;
+      await repository.deleteMany(itemIds: images.take(2).map((i) => i.id));
+      expect(await shared.exists(), isTrue);
+      expect(repository.storageStats.fileBytes, originalBytes);
+      await repository.deleteMany(itemIds: images.skip(2).map((i) => i.id));
+      expect(await shared.exists(), isFalse);
+      expect(
+        repository.storageStats.fileBytes,
+        originalBytes - await File('assets/demo/owl.jpg').length(),
+      );
+      await repository.load();
+      expect(
+        repository.items.where((i) => i.type == VaultItemType.image),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'Storage usage matches real disk bytes and counts shared media only once',
+    () async {
+      await repository.load(seedDemo: true);
+      final uniquePaths = repository.items
+          .where((i) => !i.isNote)
+          .map((i) => i.relativePath)
+          .toSet();
+      var mediaBytes = 0;
+      for (final relative in uniquePaths) {
+        mediaBytes += await File(p.join(directory.path, 'vault', relative!))
+            .length();
+      }
+      expect(repository.storageStats.fileBytes, mediaBytes);
+      expect(repository.storageStats.databaseBytes, greaterThan(0));
+      var diskBytes = 0;
+      await for (final entry in Directory(
+        p.join(directory.path, 'vault'),
+      ).list(recursive: true, followLinks: false)) {
+        if (entry is File) diskBytes += await entry.length();
+      }
+      expect(repository.totalBytes, diskBytes);
+      final images = repository.items
+          .where((i) => i.type == VaultItemType.image)
+          .toList();
+      final sharedFile = repository.fileFor(images.first);
+      await repository.deleteItem(images.first.id);
+      expect(await sharedFile.exists(), isTrue);
+      for (final image in images.skip(1)) {
+        await repository.deleteItem(image.id);
+      }
+      expect(await sharedFile.exists(), isFalse);
+      expect(
+        repository.storageStats.fileBytes,
+        mediaBytes - await File('assets/demo/owl.jpg').length(),
+      );
+    },
+  );
 }

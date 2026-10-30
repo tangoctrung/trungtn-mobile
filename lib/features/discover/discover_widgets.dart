@@ -5,6 +5,8 @@ import '../../shared/app_theme.dart';
 import '../../shared/ui.dart';
 import 'discover_controller.dart';
 import 'discover_models.dart';
+import 'news_article_screen.dart';
+import 'weather_location.dart';
 
 Future<void> openSource(BuildContext context, Uri uri) async {
   try {
@@ -47,23 +49,56 @@ class WeatherCard extends StatelessWidget {
                       children: [
                         Flexible(
                           child: Text(
-                            weather?.city.name ?? controller.city.name,
+                            weather?.city.name ??
+                                controller.city?.name ??
+                                'Vị trí hiện tại',
                             style: theme.textTheme.titleSmall,
                           ),
                         ),
                         SizedBox(
                           width: 30,
                           height: 30,
-                          child: PopupMenuButton<WeatherCity>(
-                            tooltip: 'Đổi thành phố',
+                          child: PopupMenuButton<String>(
+                            key: const Key('weather-location-menu'),
+                            tooltip: 'Chọn vị trí thời tiết',
                             padding: EdgeInsets.zero,
                             icon: const Icon(Icons.expand_more, size: 20),
-                            onSelected: controller.changeCity,
+                            onSelected: (value) {
+                              if (value == 'current') {
+                                controller.useCurrentLocation();
+                              } else {
+                                controller.changeCity(
+                                  WeatherCity.choices[int.parse(value)],
+                                );
+                              }
+                            },
                             itemBuilder: (_) => [
-                              for (final city in WeatherCity.choices)
+                              const PopupMenuItem(
+                                key: Key('weather-current-location'),
+                                value: 'current',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.my_location_rounded, size: 20),
+                                    SizedBox(width: 10),
+                                    Flexible(
+                                      child: Text(
+                                        'Vị trí hiện tại',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuDivider(),
+                              for (
+                                var i = 0;
+                                i < WeatherCity.choices.length;
+                                i++
+                              )
                                 PopupMenuItem(
-                                  value: city,
-                                  child: Text(city.name),
+                                  value: '$i',
+                                  child: Text(WeatherCity.choices[i].name),
                                 ),
                             ],
                           ),
@@ -73,7 +108,9 @@ class WeatherCard extends StatelessWidget {
                     Text(
                       weather?.description ??
                           (resource.loading
-                              ? 'Đang tải thời tiết…'
+                              ? controller.locating
+                                    ? 'Đang xác định vị trí…'
+                                    : 'Đang tải thời tiết…'
                               : 'Chưa có dữ liệu thời tiết'),
                     ),
                     if (weather != null) ...[
@@ -152,6 +189,44 @@ class WeatherCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(resource.error!, style: theme.textTheme.bodySmall),
+            ),
+          if (resource.error != null && !resource.loading)
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                TextButton.icon(
+                  key: const Key('weather-retry'),
+                  onPressed: () => controller.usingDeviceLocation
+                      ? controller.useCurrentLocation()
+                      : controller.refreshWeather(),
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  label: Text(
+                    controller.locationIssue == WeatherLocationIssue.denied
+                        ? 'Cho phép vị trí'
+                        : 'Thử lại',
+                  ),
+                ),
+                if (controller.locationIssue ==
+                        WeatherLocationIssue.deniedForever ||
+                    controller.locationIssue ==
+                        WeatherLocationIssue.serviceDisabled)
+                  TextButton.icon(
+                    key: const Key('weather-location-settings'),
+                    onPressed: () async {
+                      final opened = await controller
+                          .openWeatherLocationSettings();
+                      if (!opened && context.mounted) {
+                        showMessage(
+                          context,
+                          'Chưa mở được cài đặt. Hãy mở phần Vị trí trong cài đặt thiết bị.',
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.settings_outlined, size: 18),
+                    label: const Text('Mở cài đặt'),
+                  ),
+              ],
             ),
         ],
       ),
@@ -392,7 +467,7 @@ class NewsPostCard extends StatelessWidget {
       child: Material(
         color: Colors.white,
         child: InkWell(
-          onTap: () => openSource(context, post.url),
+          onTap: () => openNewsArticle(context, post),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -476,7 +551,7 @@ class NewsPostCard extends StatelessWidget {
                     ),
                     const Padding(
                       padding: EdgeInsets.only(left: 8, top: 2),
-                      child: Icon(Icons.north_east, size: 18),
+                      child: Icon(Icons.chevron_right_rounded, size: 22),
                     ),
                   ],
                 ),
